@@ -1,5 +1,7 @@
 # CSQL.jl — Causal SQL Databases for Julia
 
+[![Dev Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaKnowledge.github.io/CSQL.jl/dev/)
+
 A Julia implementation of the **Csql** causal database framework ([arXiv:2601.08109](https://arxiv.org/abs/2601.08109)).
 
 CSQL.jl builds SQL-queryable causal databases from extracted causal claims (triples), supporting:
