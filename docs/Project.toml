@@ -1,0 +1,3 @@
+[deps]
+CSQL = "e80ae130-8983-4be4-9c83-9f285766f415"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
