@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Provenance and Local Causal Models</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="provenance_files/libs/clipboard/clipboard.min.js"></script>
+<script src="provenance_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="provenance_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="provenance_files/libs/quarto-html/popper.min.js"></script>
+<script src="provenance_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="provenance_files/libs/quarto-html/anchor.min.js"></script>
+<link href="provenance_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="provenance_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="provenance_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="provenance_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="provenance_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#local-causal-models" id="toc-local-causal-models" class="nav-link" data-scroll-target="#local-causal-models">Local Causal Models</a></li>
+  <li><a href="#building-from-multiple-lcms" id="toc-building-from-multiple-lcms" class="nav-link" data-scroll-target="#building-from-multiple-lcms">Building from Multiple LCMs</a></li>
+  <li><a href="#querying-provenance" id="toc-querying-provenance" class="nav-link" data-scroll-target="#querying-provenance">Querying Provenance</a>
+  <ul class="collapse">
+  <li><a href="#all-support-records" id="toc-all-support-records" class="nav-link" data-scroll-target="#all-support-records">All Support Records</a></li>
+  <li><a href="#edges-supported-by-multiple-documents" id="toc-edges-supported-by-multiple-documents" class="nav-link" data-scroll-target="#edges-supported-by-multiple-documents">Edges Supported by Multiple Documents</a></li>
+  <li><a href="#provenance-by-document" id="toc-provenance-by-document" class="nav-link" data-scroll-target="#provenance-by-document">Provenance by Document</a></li>
+  </ul></li>
+  <li><a href="#overlapping-claims" id="toc-overlapping-claims" class="nav-link" data-scroll-target="#overlapping-claims">Overlapping Claims</a></li>
+  <li><a href="#edge-metadata" id="toc-edge-metadata" class="nav-link" data-scroll-target="#edge-metadata">Edge Metadata</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="provenance.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Provenance and Local Causal Models</h1>
+<p class="subtitle lead">Tracking evidence sources behind causal claims</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>A key feature of Csql is <strong>provenance tracking</strong>: every causal claim is linked back to its source document and local causal model (LCM). This enables:</p>
+<ul>
+<li>Auditing which papers support a claim</li>
+<li>Weighting evidence by document quality</li>
+<li>Detecting when claims come from a single vs.&nbsp;multiple sources</li>
+<li>Understanding evidence aggregation</li>
+</ul>
+<p>This vignette covers the <code>LocalCausalModel</code> type, the <code>atlas_edge_support</code> table, and provenance queries.</p>
+</section>
+<section id="local-causal-models" class="level2">
+<h2 class="anchored" data-anchor-id="local-causal-models">Local Causal Models</h2>
+<p>A <em>Local Causal Model</em> (LCM) is a set of causal triples extracted from a single document or hypothesis. Instead of adding triples one by one, you can package them as an LCM:</p>
+<div id="2" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">CSQL</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># LCM from a transmission dynamics paper</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>lcm1 <span class="op">=</span> <span class="fu">LocalCausalModel</span>(<span class="st">"lcm_trans_001"</span>, <span class="st">"smith2023"</span>,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Pathogen virulence"</span>, <span class="st">"increases"</span>, <span class="st">"Disease severity"</span>),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Pathogen transmissibility"</span>, <span class="st">"increases"</span>, <span class="st">"Basic reproduction number"</span>),</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Basic reproduction number"</span>, <span class="st">"increases"</span>, <span class="st">"Epidemic potential"</span>),</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Disease severity"</span>, <span class="st">"increases"</span>, <span class="st">"Case fatality rate"</span>),</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    ];</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    focus<span class="op">=</span><span class="st">"transmission dynamics"</span>,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    score<span class="op">=</span><span class="fl">0.92</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="fu">Dict</span><span class="dt">{String,Any}</span>(<span class="st">"stage"</span> <span class="op">=&gt;</span> <span class="st">"validated"</span>, <span class="st">"source_model"</span> <span class="op">=&gt;</span> <span class="st">"GPT-4"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"LCM: </span><span class="sc">$</span>(lcm1.lcm_id)<span class="st"> from </span><span class="sc">$</span>(lcm1.doc_id)<span class="st">"</span>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Focus: </span><span class="sc">$</span>(lcm1.focus)<span class="st">"</span>)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Triples: </span><span class="sc">$</span>(<span class="fu">length</span>(lcm1.triples))<span class="st">"</span>)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Score: </span><span class="sc">$</span>(lcm1.score)<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>LCM: lcm_trans_001 from smith2023
+  Focus: transmission dynamics
+  Triples: 4
+  Score: 0.92</code></pre>
+</div>
+</div>
+</section>
+<section id="building-from-multiple-lcms" class="level2">
+<h2 class="anchored" data-anchor-id="building-from-multiple-lcms">Building from Multiple LCMs</h2>
+<p>Let’s build an atlas from multiple LCMs representing different papers:</p>
+<div id="4" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># LCM from an immunity paper</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>lcm2 <span class="op">=</span> <span class="fu">LocalCausalModel</span>(<span class="st">"lcm_immun_001"</span>, <span class="st">"chen2023"</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Vaccination"</span>, <span class="st">"increases"</span>, <span class="st">"Antibody levels"</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Antibody levels"</span>, <span class="st">"reduces"</span>, <span class="st">"Susceptibility"</span>),</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Natural infection"</span>, <span class="st">"increases"</span>, <span class="st">"Antibody levels"</span>),</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Susceptibility"</span>, <span class="st">"increases"</span>, <span class="st">"Basic reproduction number"</span>),</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    ];</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    focus<span class="op">=</span><span class="st">"immunity"</span>,</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    score<span class="op">=</span><span class="fl">0.88</span>,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="fu">Dict</span><span class="dt">{String,Any}</span>(<span class="st">"stage"</span> <span class="op">=&gt;</span> <span class="st">"original"</span>, <span class="st">"source_model"</span> <span class="op">=&gt;</span> <span class="st">"Claude"</span>)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="co"># LCM from an intervention paper — overlaps with lcm1</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>lcm3 <span class="op">=</span> <span class="fu">LocalCausalModel</span>(<span class="st">"lcm_interv_001"</span>, <span class="st">"patel2024"</span>,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Healthcare capacity"</span>, <span class="st">"reduces"</span>, <span class="st">"Case fatality rate"</span>),</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Disease severity"</span>, <span class="st">"increases"</span>, <span class="st">"Case fatality rate"</span>),</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CausalTriple</span>(<span class="st">"Quarantine"</span>, <span class="st">"reduces"</span>, <span class="st">"Basic reproduction number"</span>),</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    ];</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    focus<span class="op">=</span><span class="st">"interventions"</span>,</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    score<span class="op">=</span><span class="fl">0.85</span>,</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="fu">Dict</span><span class="dt">{String,Any}</span>(<span class="st">"stage"</span> <span class="op">=&gt;</span> <span class="st">"original"</span>, <span class="st">"source_model"</span> <span class="op">=&gt;</span> <span class="st">"GPT-4"</span>)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Build atlas from all three LCMs</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>builder <span class="op">=</span> <span class="fu">AtlasBuilder</span>()</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="fu">add_lcm!</span>(builder, lcm1)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="fu">add_lcm!</span>(builder, lcm2)</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="fu">add_lcm!</span>(builder, lcm3)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>csql <span class="op">=</span> <span class="fu">connect_csql</span>()</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="fu">build!</span>(builder, csql.db)</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>stats <span class="op">=</span> <span class="fu">statistics</span>(csql)</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Atlas: </span><span class="sc">$</span>(stats[<span class="op">:</span>n_nodes])<span class="st"> nodes, </span><span class="sc">$</span>(stats[<span class="op">:</span>n_edges])<span class="st"> edges, </span><span class="sc">$</span>(stats[<span class="op">:</span>n_support])<span class="st"> support records"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Atlas: 12 nodes, 10 edges, 11 support records</code></pre>
+</div>
+</div>
+</section>
+<section id="querying-provenance" class="level2">
+<h2 class="anchored" data-anchor-id="querying-provenance">Querying Provenance</h2>
+<p>The <code>atlas_edge_support</code> table tracks which documents and LCMs support each edge.</p>
+<section id="all-support-records" class="level3">
+<h3 class="anchored" data-anchor-id="all-support-records">All Support Records</h3>
+<div id="6" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>support <span class="op">=</span> <span class="fu">custom_query</span>(csql, <span class="st">"""</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT es.doc_id, es.lcm_instance_id, es.score,</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="st">           n1.label_canon AS src, n2.label_canon AS dst</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM atlas_edge_support es</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_edges e ON es.edge_id = e.edge_id</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n1 ON e.src_id = n1.node_id</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n2 ON e.dst_id = n2.node_id</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY es.doc_id, es.lcm_instance_id</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total support records: </span><span class="sc">$</span>(<span class="fu">length</span>(support))<span class="st">"</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s <span class="kw">in</span> support</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  [</span><span class="sc">$</span>(s.doc_id)<span class="st">/</span><span class="sc">$</span>(s.lcm_instance_id)<span class="st">] </span><span class="sc">$</span>(s.src)<span class="st"> → </span><span class="sc">$</span>(s.dst)<span class="st">  score=</span><span class="sc">$</span>(<span class="fu">round</span>(s.score; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">"</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Total support records: 11
+  [chen2023/lcm_immun_001] vaccination → antibody levels  score=0.88
+  [chen2023/lcm_immun_001] antibody levels → susceptibility  score=0.88
+  [chen2023/lcm_immun_001] natural infection → antibody levels  score=0.88
+  [chen2023/lcm_immun_001] susceptibility → basic reproduction number  score=0.88
+  [patel2024/lcm_interv_001] healthcare capacity → case fatality rate  score=0.85
+  [patel2024/lcm_interv_001] disease severity → case fatality rate  score=0.85
+  [patel2024/lcm_interv_001] quarantine → basic reproduction number  score=0.85
+  [smith2023/lcm_trans_001] pathogen virulence → disease severity  score=0.92
+  [smith2023/lcm_trans_001] pathogen transmissibility → basic reproduction number  score=0.92
+  [smith2023/lcm_trans_001] basic reproduction number → epidemic potential  score=0.92
+  [smith2023/lcm_trans_001] disease severity → case fatality rate  score=0.92</code></pre>
+</div>
+</div>
+</section>
+<section id="edges-supported-by-multiple-documents" class="level3">
+<h3 class="anchored" data-anchor-id="edges-supported-by-multiple-documents">Edges Supported by Multiple Documents</h3>
+<p>Claims supported by multiple independent sources are more credible:</p>
+<div id="8" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>multi_doc <span class="op">=</span> <span class="fu">custom_query</span>(csql, <span class="st">"""</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="st">           e.support_docs, e.support_lcms, e.score_sum</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM atlas_edges e</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n1 ON e.src_id = n1.node_id</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n2 ON e.dst_id = n2.node_id</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE e.support_docs &gt; 1</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY e.support_docs DESC</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Edges with multi-document support:"</span>)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> m <span class="kw">in</span> multi_doc</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(m.src)<span class="st"> —[</span><span class="sc">$</span>(m.rel_type)<span class="st">]→ </span><span class="sc">$</span>(m.dst)<span class="st">"</span>)</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"    docs=</span><span class="sc">$</span>(m.support_docs)<span class="st">, lcms=</span><span class="sc">$</span>(m.support_lcms)<span class="st">, total_score=</span><span class="sc">$</span>(<span class="fu">round</span>(m.score_sum; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">"</span>)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="fu">isempty</span>(multi_doc)</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  (none — each edge comes from a single document in this example)"</span>)</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Edges with multi-document support:
+  disease severity —[INCREASES]→ case fatality rate
+    docs=2, lcms=2, total_score=1.77</code></pre>
+</div>
+</div>
+</section>
+<section id="provenance-by-document" class="level3">
+<h3 class="anchored" data-anchor-id="provenance-by-document">Provenance by Document</h3>
+<p>Which claims does each document contribute?</p>
+<div id="10" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>by_doc <span class="op">=</span> <span class="fu">custom_query</span>(csql, <span class="st">"""</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT es.doc_id,</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="st">           COUNT(DISTINCT es.edge_id) AS n_edges,</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">           COUNT(*) AS n_records,</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="st">           SUM(es.score) AS total_score</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM atlas_edge_support es</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY es.doc_id</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY total_score DESC</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Provenance by document:"</span>)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> by_doc</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(d.doc_id)<span class="st">: </span><span class="sc">$</span>(d.n_edges)<span class="st"> edges, </span><span class="sc">$</span>(d.n_records)<span class="st"> support records, score=</span><span class="sc">$</span>(<span class="fu">round</span>(d.total_score; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">"</span>)</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Provenance by document:
+  smith2023: 4 edges, 4 support records, score=3.68
+  chen2023: 4 edges, 4 support records, score=3.52
+  patel2024: 3 edges, 3 support records, score=2.55</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="overlapping-claims" class="level2">
+<h2 class="anchored" data-anchor-id="overlapping-claims">Overlapping Claims</h2>
+<p>When multiple LCMs assert the same causal relationship, CSQL.jl aggregates them. Let’s find these overlaps:</p>
+<div id="12" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>overlaps <span class="op">=</span> <span class="fu">custom_query</span>(csql, <span class="st">"""</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="st">           e.support_lcms, e.score_sum, e.score_mean, e.score_max</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM atlas_edges e</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n1 ON e.src_id = n1.node_id</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n2 ON e.dst_id = n2.node_id</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE e.support_lcms &gt; 1</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY e.support_lcms DESC</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Aggregated edges (multiple LCM support):"</span>)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> o <span class="kw">in</span> overlaps</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(o.src)<span class="st"> —[</span><span class="sc">$</span>(o.rel_type)<span class="st">]→ </span><span class="sc">$</span>(o.dst)<span class="st">"</span>)</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"    lcms=</span><span class="sc">$</span>(o.support_lcms)<span class="st">, sum=</span><span class="sc">$</span>(<span class="fu">round</span>(o.score_sum; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">, mean=</span><span class="sc">$</span>(<span class="fu">round</span>(o.score_mean; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">, max=</span><span class="sc">$</span>(<span class="fu">round</span>(o.score_max; digits<span class="op">=</span><span class="fl">2</span>))<span class="st">"</span>)</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Aggregated edges (multiple LCM support):
+  disease severity —[INCREASES]→ case fatality rate
+    lcms=2, sum=1.77, mean=0.88, max=0.92</code></pre>
+</div>
+</div>
+</section>
+<section id="edge-metadata" class="level2">
+<h2 class="anchored" data-anchor-id="edge-metadata">Edge Metadata</h2>
+<p>The <code>atlas_edges</code> table stores rich metadata about each causal claim:</p>
+<div id="14" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>edges <span class="op">=</span> <span class="fu">custom_query</span>(csql, <span class="st">"""</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="st">           e.stage, e.confidence, e.grounded, e.source_model</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM atlas_edges e</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n1 ON e.src_id = n1.node_id</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN atlas_nodes n2 ON e.dst_id = n2.node_id</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY e.score_sum DESC</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="st">    LIMIT 5</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Top 5 edges with metadata:"</span>)</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cn">e</span> <span class="kw">in</span> edges</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="cn">e</span>.src)<span class="st"> → </span><span class="sc">$</span>(<span class="cn">e</span>.dst)<span class="st">"</span>)</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"    stage=</span><span class="sc">$</span>(<span class="cn">e</span>.stage)<span class="st">, confidence=</span><span class="sc">$</span>(<span class="cn">e</span>.confidence)<span class="st">, grounded=</span><span class="sc">$</span>(<span class="cn">e</span>.grounded)<span class="st">, model=</span><span class="sc">$</span>(<span class="cn">e</span>.source_model)<span class="st">"</span>)</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Top 5 edges with metadata:
+  disease severity → case fatality rate
+    stage=validated, confidence=1.0, grounded=not_evaluated, model=GPT-4
+  pathogen transmissibility → basic reproduction number
+    stage=validated, confidence=1.0, grounded=not_evaluated, model=GPT-4
+  pathogen virulence → disease severity
+    stage=validated, confidence=1.0, grounded=not_evaluated, model=GPT-4
+  basic reproduction number → epidemic potential
+    stage=validated, confidence=1.0, grounded=not_evaluated, model=GPT-4
+  susceptibility → basic reproduction number
+    stage=original, confidence=1.0, grounded=not_evaluated, model=Claude</code></pre>
+</div>
+</div>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<p>This vignette demonstrated:</p>
+<ul>
+<li><strong><code>LocalCausalModel</code></strong> — packaging triples from a single source</li>
+<li><strong><code>add_lcm!</code></strong> — batch ingestion of causal models</li>
+<li><strong><code>atlas_edge_support</code></strong> — provenance table linking edges to documents</li>
+<li><strong>Multi-document evidence</strong> — aggregation across independent sources</li>
+<li><strong>Edge metadata</strong> — stage, confidence, grounding status, source model</li>
+</ul>
+<p>Next: <a href="../05-merging/merging.html">Atlas Merging</a> covers combining causal databases from different research domains.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

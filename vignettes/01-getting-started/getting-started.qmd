@@ -1,0 +1,159 @@
+---
+title: "Getting Started with CSQL.jl"
+author: "Simon Frost"
+subtitle: "Building your first causal database"
+format:
+  html:
+    code-fold: false
+    toc: true
+  gfm:
+    toc: true
+engine: julia
+---
+
+## Introduction
+
+**CSQL.jl** implements the *Csql* causal database framework ([arXiv:2601.08109](https://arxiv.org/abs/2601.08109)) in Julia.
+It builds SQL-queryable causal databases from extracted causal claims — triples of the form *(subject, relation, object)* — and provides tools for querying, intervention analysis, and multi-source merging.
+
+This vignette walks through the basics: creating a builder, adding causal triples, building the database, and running your first queries.
+
+## Setup
+
+```{julia}
+using CSQL
+```
+
+## Creating Causal Triples
+
+A *causal triple* represents a single claim: **A** *relation* **B**. For example, "Vaccination *reduces* Susceptibility".
+
+CSQL.jl uses an `AtlasBuilder` to accumulate triples before writing them to a database.
+
+```{julia}
+builder = AtlasBuilder()
+
+# Add epidemiological causal claims
+add_triple!(builder, "Pathogen transmissibility", "increases", "Transmission rate";
+            doc_id="smith2023", score=0.92)
+
+add_triple!(builder, "Contact rate", "increases", "Transmission rate";
+            doc_id="jones2024", score=0.87)
+
+add_triple!(builder, "Vaccination coverage", "reduces", "Host susceptibility";
+            doc_id="chen2023", score=0.85)
+
+add_triple!(builder, "Vaccination coverage", "increases", "Population immunity";
+            doc_id="chen2023", score=0.91)
+
+add_triple!(builder, "Host susceptibility", "increases", "Transmission rate";
+            doc_id="smith2023", score=0.80)
+
+add_triple!(builder, "Transmission rate", "increases", "Outbreak severity";
+            doc_id="smith2023", score=0.95)
+```
+
+Each triple is automatically:
+
+- **Canonicalized** — labels are lowercased and normalized
+- **Relation-typed** — free-text relations like "increases" are mapped to standard types (`INCREASES`, `REDUCES`, etc.)
+- **Scored** — each claim carries a confidence score (0–1)
+
+## Building the Database
+
+Connect to an in-memory SQLite database and build the atlas:
+
+```{julia}
+csql = connect_csql()
+build!(builder, csql.db)
+```
+
+The `build!` step:
+
+1. Computes stable hash IDs for each node and edge
+2. Aggregates duplicate edges (same source→target→relation) across documents
+3. Calculates degree statistics, polarity mass, and controversy scores
+4. Detects strongly connected components (feedback loops)
+5. Writes four tables: `atlas_nodes`, `atlas_edges`, `atlas_edge_support`, `atlas_scc`
+
+## Basic Queries
+
+### Atlas Statistics
+
+```{julia}
+stats = statistics(csql)
+println("Nodes: ", stats[:n_nodes])
+println("Edges: ", stats[:n_edges])
+println("Support records: ", stats[:n_support])
+println("Score range: ", round(stats[:min_score]; digits=2), " – ", round(stats[:max_score]; digits=2))
+```
+
+### Causal Backbone
+
+The **backbone** returns the highest-scoring causal relationships:
+
+```{julia}
+bb = backbone(csql; limit=10)
+for row in bb
+    println("  $(row.src) —[$(row.rel_type)]→ $(row.dst)  (score=$(round(row.score_sum; digits=2)))")
+end
+```
+
+### Causal Hubs
+
+**Hubs** are the most influential concepts — nodes with the highest outgoing score mass:
+
+```{julia}
+hubs = causal_hubs(csql; limit=5)
+for h in hubs
+    println("  $(h.concept): out_mass=$(round(h.out_mass; digits=2)), edges=$(h.n_edges)")
+end
+```
+
+### Downstream Effects
+
+What does a concept *cause*?
+
+```{julia}
+effects = effects_of(csql, "vaccination")
+for e in effects
+    println("  vaccination coverage —[$(e.rel_type)]→ $(e.dst)  (score=$(round(e.score_sum; digits=2)))")
+end
+```
+
+### Upstream Causes
+
+What *causes* a concept?
+
+```{julia}
+causes = causes_of(csql, "transmission rate")
+for c in causes
+    println("  $(c.src) —[$(c.rel_type)]→ transmission rate  (score=$(round(c.score_sum; digits=2)))")
+end
+```
+
+## Custom SQL Queries
+
+You can run arbitrary SQL against the underlying tables:
+
+```{julia}
+rows = custom_query(csql, """
+    SELECT n.label_canon, n.deg_out, n.deg_in
+    FROM atlas_nodes n
+    ORDER BY n.deg_out + n.deg_in DESC
+""")
+for r in rows
+    println("  $(r.label_canon): out=$(r.deg_out), in=$(r.deg_in)")
+end
+```
+
+## Summary
+
+In this vignette you learned how to:
+
+- Create an `AtlasBuilder` and add causal triples
+- Build a CSQL database with `connect_csql()` and `build!()`
+- Query the backbone, hubs, effects, and causes
+- Run custom SQL queries
+
+Next: [Querying in Depth](../02-querying/querying.html) covers the full query API including multi-hop causal paths and feedback loop detection.

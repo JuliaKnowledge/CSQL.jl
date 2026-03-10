@@ -1,0 +1,161 @@
+---
+title: "Counterfactual Reasoning"
+author: "Simon Frost"
+subtitle: "Do-cut interventions and causal inference"
+format:
+  html:
+    code-fold: false
+    toc: true
+  gfm:
+    toc: true
+engine: julia
+---
+
+## Introduction
+
+One of the most powerful features of causal databases is the ability to reason about *interventions*. Pearl's *do-calculus* formalizes the question: "What would happen if we *forced* variable X to a particular value?"
+
+In CSQL.jl, interventions are implemented as SQL query rewrites that simulate cutting or attenuating outgoing edges from a concept. This vignette covers:
+
+- **Hard do-cut** — completely remove a concept's influence
+- **Soft do** — attenuate (reduce) a concept's influence
+- **Do-cut diff** — compare baseline vs intervention
+
+## Building the Atlas
+
+We'll use a classic epidemiological causal model:
+
+```{julia}
+using CSQL
+
+builder = AtlasBuilder()
+
+# Disease transmission chain
+add_triple!(builder, "Pathogen", "increases", "Transmission";
+            doc_id="doc1", score=0.95)
+add_triple!(builder, "Contact rate", "increases", "Transmission";
+            doc_id="doc1", score=0.87)
+add_triple!(builder, "Transmission", "increases", "Infection prevalence";
+            doc_id="doc1", score=0.92)
+add_triple!(builder, "Infection prevalence", "increases", "Mortality";
+            doc_id="doc2", score=0.78)
+
+# Intervention: vaccination
+add_triple!(builder, "Vaccination", "reduces", "Susceptibility";
+            doc_id="doc2", score=0.88)
+add_triple!(builder, "Vaccination", "increases", "Herd immunity";
+            doc_id="doc2", score=0.91)
+add_triple!(builder, "Susceptibility", "increases", "Transmission";
+            doc_id="doc1", score=0.83)
+add_triple!(builder, "Herd immunity", "reduces", "Transmission";
+            doc_id="doc2", score=0.79)
+
+# Healthcare
+add_triple!(builder, "Healthcare", "reduces", "Mortality";
+            doc_id="doc3", score=0.90)
+
+csql = connect_csql()
+build!(builder, csql.db)
+```
+
+## Baseline: The Causal Backbone
+
+First, let's see the full causal backbone:
+
+```{julia}
+println("=== Baseline Backbone ===")
+base = backbone(csql; limit=20)
+for r in base
+    println("  $(r.src) —[$(r.rel_type)]→ $(r.dst)  score=$(round(r.score_sum; digits=2))")
+end
+println("\nTotal edges: $(length(base))")
+```
+
+## Hard Do-Cut: Removing Vaccination
+
+The `do_cut` function removes all outgoing edges from a concept, simulating the question: *"What would the causal landscape look like without vaccination?"*
+
+```{julia}
+println("=== Do-Cut: Remove Vaccination ===")
+cf = do_cut(csql, "vaccination"; limit=20)
+for r in cf
+    println("  $(r.src) —[$(r.rel_type)]→ $(r.dst)  score=$(round(r.score_sum; digits=2))")
+end
+println("\nEdges after intervention: $(length(cf))")
+```
+
+Notice that vaccination's effects (reducing susceptibility, increasing herd immunity) are gone — but the downstream concepts still exist via other causal pathways.
+
+## Do-Cut Diff: What Changes?
+
+`do_cut_diff` compares baseline and counterfactual, identifying which edges are lost:
+
+```{julia}
+diff = do_cut_diff(csql, "vaccination"; limit=20)
+println("=== Edges Removed by do(¬vaccination) ===")
+for r in diff.removed
+    println("  $(r.src) —[$(r.rel_type)]→ $(r.dst)  score=$(round(r.score_sum; digits=2))")
+end
+println("\nBaseline: $(length(diff.baseline)) edges")
+println("Counterfactual: $(length(diff.counterfactual)) edges")
+println("Removed: $(length(diff.removed)) edges")
+```
+
+## Soft Do: Attenuated Intervention
+
+Sometimes we don't want to completely remove a variable's influence — just reduce it. `soft_do` attenuates outgoing scores by a factor:
+
+```{julia}
+println("=== Soft Do: Reduce Pathogen influence by 80% ===")
+soft = soft_do(csql, "pathogen"; attenuation=0.2, limit=20)
+for r in soft
+    score_str = round(r.score_sum_adj; digits=2)
+    println("  $(r.src) —[$(r.rel_type)]→ $(r.dst)  adj_score=$(score_str)")
+end
+```
+
+Compare with baseline — pathogen's outgoing edge score is reduced to 20% of original, while all other edges retain full scores.
+
+## Comparing Multiple Interventions
+
+Let's compare the impact of different interventions:
+
+```{julia}
+println("=== Intervention Comparison ===\n")
+
+interventions = ["vaccination", "healthcare", "pathogen"]
+for concept in interventions
+    diff = do_cut_diff(csql, concept; limit=20)
+    println("do(¬$(concept)):")
+    println("  Edges removed: $(length(diff.removed))")
+    if !isempty(diff.removed)
+        total_lost = sum(r.score_sum for r in diff.removed)
+        println("  Total score mass lost: $(round(total_lost; digits=2))")
+    end
+    println()
+end
+```
+
+This reveals which concepts have the most causal influence: removing them disrupts the most edges and score mass.
+
+## Interpreting Counterfactuals
+
+The do-cut analysis answers practical questions:
+
+| Question | CSQL Operation |
+|----------|---------------|
+| "What if there were no vaccination?" | `do_cut(csql, "vaccination")` |
+| "What if the pathogen were less transmissible?" | `soft_do(csql, "pathogen"; attenuation=0.3)` |
+| "Which intervention matters most?" | Compare `do_cut_diff` across interventions |
+| "What causal paths survive without X?" | `do_cut` + `causal_paths` on result |
+
+## Summary
+
+This vignette demonstrated:
+
+- **`do_cut`** — hard intervention removing all outgoing edges
+- **`soft_do`** — partial attenuation of outgoing influence
+- **`do_cut_diff`** — comparison of baseline vs intervention
+- **Multi-intervention comparison** — ranking concepts by causal importance
+
+Next: [Provenance and LCMs](../04-provenance/provenance.html) covers tracking the source documents behind causal claims.
