@@ -94,6 +94,17 @@ CSQL creates four tables:
 
 - `merge_atlases!(target, [source1, source2]; atlas_ids)` — combine atlases
 
+## Vignettes
+
+| # | Vignette | Description |
+|---|----------|-------------|
+| 1 | [Getting Started](vignettes/01-getting-started/getting-started.md) | Building your first causal database |
+| 2 | [Querying Causal Databases](vignettes/02-querying/querying.md) | Multi-hop paths, feedback loops, and controversy detection |
+| 3 | [Counterfactual Reasoning](vignettes/03-counterfactual/counterfactual.md) | Do-cut interventions and causal inference |
+| 4 | [Provenance and Local Causal Models](vignettes/04-provenance/provenance.md) | Tracking evidence sources behind causal claims |
+| 5 | [Merging Causal Atlases](vignettes/05-merging/merging.md) | Combining causal databases from multiple sources |
+| 6 | [DuckDB Backend](vignettes/06-duckdb-backend/duckdb-backend.md) | Using DuckDB for analytical queries on causal databases |
+
 ## Testing
 
 ```bash
