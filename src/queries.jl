@@ -123,45 +123,63 @@ end
 """
     causal_paths(csql; depth=2, min_score=0.0, limit=20)
 
-Find multi-hop causal chains via self-join. Currently supports depth=2 (A→B→C).
+Find multi-hop causal chains of length `depth` via self-join.
+For depth=2, returns paths A→B→C; for depth=3, A→B→C→D; and so on
+for any positive integer depth ≥ 2.
+
+Result columns use letter aliases for nodes (`a`, `b`, `c`, ...) and
+numbered aliases for relations (`r1`, `r2`, ...), plus a `path_score`.
+
+Results are ordered by `path_score` (sum of edge scores along the path)
+and filtered so that every edge meets `min_score`.
 """
 function causal_paths(csql::CSQLDatabase; depth::Int=2, min_score::Float64=0.0, limit::Int=20)
-    if depth == 2
-        _query(csql, """
-            SELECT n1.label_canon AS a, e1.rel_type AS r1,
-                   n2.label_canon AS b, e2.rel_type AS r2,
-                   n3.label_canon AS c,
-                   (e1.score_sum + e2.score_sum) AS path_score
-            FROM atlas_edges e1
-            JOIN atlas_edges e2 ON e1.dst_id = e2.src_id
-            JOIN atlas_nodes n1 ON e1.src_id = n1.node_id
-            JOIN atlas_nodes n2 ON e1.dst_id = n2.node_id
-            JOIN atlas_nodes n3 ON e2.dst_id = n3.node_id
-            WHERE e1.score_sum >= ? AND e2.score_sum >= ?
-            ORDER BY path_score DESC
-            LIMIT ?
-        """, (min_score, min_score, limit))
-    elseif depth == 3
-        _query(csql, """
-            SELECT n1.label_canon AS a, e1.rel_type AS r1,
-                   n2.label_canon AS b, e2.rel_type AS r2,
-                   n3.label_canon AS c, e3.rel_type AS r3,
-                   n4.label_canon AS d,
-                   (e1.score_sum + e2.score_sum + e3.score_sum) AS path_score
-            FROM atlas_edges e1
-            JOIN atlas_edges e2 ON e1.dst_id = e2.src_id
-            JOIN atlas_edges e3 ON e2.dst_id = e3.src_id
-            JOIN atlas_nodes n1 ON e1.src_id = n1.node_id
-            JOIN atlas_nodes n2 ON e1.dst_id = n2.node_id
-            JOIN atlas_nodes n3 ON e2.dst_id = n3.node_id
-            JOIN atlas_nodes n4 ON e3.dst_id = n4.node_id
-            WHERE e1.score_sum >= ? AND e2.score_sum >= ? AND e3.score_sum >= ?
-            ORDER BY path_score DESC
-            LIMIT ?
-        """, (min_score, min_score, min_score, limit))
-    else
-        error("causal_paths: depth must be 2 or 3 (got $depth)")
+    depth >= 2 || error("causal_paths: depth must be ≥ 2 (got $depth)")
+
+    # Node column aliases use letters: a, b, c, ...
+    # Relation column aliases: r1, r2, r3, ...
+    node_alias(i) = string(Char('a' + i - 1))
+
+    select_parts = String[]
+    for i in 1:depth
+        push!(select_parts, "n$i.label_canon AS $(node_alias(i))")
+        push!(select_parts, "e$i.rel_type AS r$i")
     end
+    push!(select_parts, "n$(depth+1).label_canon AS $(node_alias(depth+1))")
+
+    # Sum of edge scores
+    score_expr = join(["e$i.score_sum" for i in 1:depth], " + ")
+    push!(select_parts, "($score_expr) AS path_score")
+
+    # Edge joins: e1, e2, ..., e_depth chained by dst_id = src_id
+    edge_joins = ["atlas_edges e1"]
+    for i in 2:depth
+        push!(edge_joins, "JOIN atlas_edges e$i ON e$(i-1).dst_id = e$i.src_id")
+    end
+
+    # Node joins: n1 on e1.src_id, n2 on e1.dst_id, n3 on e2.dst_id, ...
+    node_joins = [
+        "JOIN atlas_nodes n1 ON e1.src_id = n1.node_id",
+        "JOIN atlas_nodes n2 ON e1.dst_id = n2.node_id",
+    ]
+    for i in 2:depth
+        push!(node_joins, "JOIN atlas_nodes n$(i+1) ON e$i.dst_id = n$(i+1).node_id")
+    end
+
+    # WHERE clause: each edge must meet min_score
+    where_parts = ["e$i.score_sum >= ?" for i in 1:depth]
+
+    sql = string(
+        "SELECT ", join(select_parts, ", "), "\n",
+        "FROM ", join(edge_joins, "\n"), "\n",
+        join(node_joins, "\n"), "\n",
+        "WHERE ", join(where_parts, " AND "), "\n",
+        "ORDER BY path_score DESC\n",
+        "LIMIT ?",
+    )
+
+    params = tuple(fill(min_score, depth)..., limit)
+    _query(csql, sql, params)
 end
 
 # ─── Feedback Loops ──────────────────────────────────────────────────────────
