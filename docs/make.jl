@@ -26,4 +26,5 @@ makedocs(;
 deploydocs(;
     repo = "github.com/JuliaKnowledge/CSQL.jl.git",
     devbranch = "main",
+    push_preview = true,
 )
