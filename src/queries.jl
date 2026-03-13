@@ -47,7 +47,7 @@ Extract the causal backbone: highest-scoring edges in the atlas.
 """
 function backbone(csql::CSQLDatabase; limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
@@ -87,7 +87,7 @@ Find downstream effects of a concept (outgoing edges from concept).
 """
 function effects_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
@@ -107,7 +107,7 @@ Find upstream causes of a concept (incoming edges to concept).
 """
 function causes_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
@@ -212,7 +212,7 @@ Find edges with mixed directional evidence (high controversy score).
 """
 function controversial_claims(csql::CSQLDatabase; threshold::Float64=0.1, limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.controversy, e.pol_mass_inc, e.pol_mass_dec,
                e.support_lcms, e.score_sum
         FROM atlas_edges e

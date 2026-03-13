@@ -9,7 +9,7 @@ This implements Pearl's do-operator as a SQL view rewrite.
 """
 function do_cut(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
@@ -29,7 +29,7 @@ Returns the backbone with adjusted scores.
 function soft_do(csql::CSQLDatabase, concept::AbstractString;
                  attenuation::Float64=0.2, limit::Int=20)
     CausalResult(_query(csql, """
-        SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
+        SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms,
                CASE WHEN LOWER(n1.label_canon) LIKE ?
                     THEN e.score_sum * ?
