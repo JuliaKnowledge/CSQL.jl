@@ -6,7 +6,7 @@ This tutorial walks through the core workflow of CSQL.jl: creating causal triple
 
 A *causal triple* represents a single claim: **subject** *relation* **object**. For example, "Vaccination *reduces* Susceptibility".
 
-```julia
+```@example tutorial
 using CSQL
 
 builder = AtlasBuilder()
@@ -19,6 +19,7 @@ add_triple!(builder, "Contact rate", "increases", "Transmission";
             doc_id="jones2024", score=0.85)
 add_triple!(builder, "Transmission", "increases", "Outbreak severity";
             doc_id="jones2024", score=0.95)
+nothing # hide
 ```
 
 Triples are automatically canonicalized: concept labels are lowercased and normalized, and free-form relation strings are mapped to a fixed [`RelationType`](@ref) enum with an associated [`Polarity`](@ref).
@@ -27,84 +28,98 @@ Triples are automatically canonicalized: concept labels are lowercased and norma
 
 You can also add triples via a [`LocalCausalModel`](@ref), which groups triples from a single document:
 
-```julia
+```@example tutorial
 lcm = LocalCausalModel(
-    doc_id = "jones2024",
-    triples = [
+    "lcm1",           # lcm_id
+    "jones2024",      # doc_id
+    [                  # triples
         CausalTriple("Contact rate", "increases", "Transmission"),
         CausalTriple("Transmission", "increases", "Outbreak severity"),
     ]
 )
 add_lcm!(builder, lcm)
+nothing # hide
 ```
 
 ## Building the Database
 
 Connect to a database backend and build:
 
-```julia
+```@example tutorial
 csql = connect_csql()           # in-memory SQLite (default)
 build!(builder, csql.db)
-```
-
-For DuckDB:
-
-```julia
-csql = connect_csql(backend=:duckdb)
-build!(builder, csql.db)
+nothing # hide
 ```
 
 ## Querying
 
-### Backbone and Hubs
+### Backbone
 
-```julia
-backbone(csql)           # highest-scoring edges
-causal_hubs(csql)         # most connected concepts
+The backbone extracts the highest-scoring edges in the atlas:
+
+```@example tutorial
+backbone(csql)
+```
+
+### Causal Hubs
+
+Identify the most influential causal concepts:
+
+```@example tutorial
+causal_hubs(csql)
 ```
 
 ### Causal Effects
 
-```julia
-effects_of(csql, "vaccination")   # downstream effects
-causes_of(csql, "transmission")   # upstream causes
+Find downstream effects of a concept:
+
+```@example tutorial
+effects_of(csql, "vaccination")
+```
+
+Find upstream causes:
+
+```@example tutorial
+causes_of(csql, "transmission")
 ```
 
 ### Multi-hop Paths
 
-```julia
-causal_paths(csql; depth=2)       # 2-hop causal chains
-causal_paths(csql; depth=3)       # 3-hop causal chains
+Find 2-hop causal chains (A→B→C):
+
+```@example tutorial
+causal_paths(csql; depth=2)
 ```
 
-### Feedback Loops and Controversy
+### Feedback Loops
 
-```julia
-feedback_loops(csql)                        # 2-cycles
-controversial_claims(csql; threshold=0.1)   # mixed evidence
+Detect 2-cycles (mutual influence):
+
+```@example tutorial
+feedback_loops(csql)
 ```
 
 ### Summary Statistics
 
-```julia
-statistics(csql)    # node/edge counts, score distribution, relation breakdown
+```@example tutorial
+statistics(csql)
 ```
 
 ### Custom SQL
 
-```julia
-custom_query(csql, "SELECT * FROM atlas_edges WHERE mean_score > 0.9")
+```@example tutorial
+custom_query(csql, "SELECT * FROM atlas_edges WHERE score_sum > 0.9")
 ```
 
 ## Counterfactual Reasoning
 
-CSQL.jl implements Pearl's do-operator for causal interventions:
+CSQL.jl implements Pearl's do-operator for causal interventions.
 
 ### Hard Intervention (do-cut)
 
 Remove all outgoing edges from a concept:
 
-```julia
+```@example tutorial
 do_cut(csql, "transmission")
 ```
 
@@ -112,7 +127,7 @@ do_cut(csql, "transmission")
 
 Attenuate outgoing edge scores:
 
-```julia
+```@example tutorial
 soft_do(csql, "transmission"; attenuation=0.2)
 ```
 
@@ -120,20 +135,56 @@ soft_do(csql, "transmission"; attenuation=0.2)
 
 Compare baseline vs. intervention:
 
-```julia
+```@example tutorial
 baseline, counterfactual, removed = do_cut_diff(csql, "transmission")
+```
+
+Baseline backbone:
+
+```@example tutorial
+baseline
+```
+
+After intervention:
+
+```@example tutorial
+counterfactual
+```
+
+Removed edges:
+
+```@example tutorial
+removed
 ```
 
 ## Merging Atlases
 
 Combine causal databases from multiple sources:
 
-```julia
-target = connect_csql()
+```@example merging
+using CSQL
+
+# Build first atlas
+builder1 = AtlasBuilder()
+add_triple!(builder1, "Smoking", "causes", "Lung cancer";
+            doc_id="who2024", score=0.95)
+add_triple!(builder1, "Smoking", "increases", "Heart disease";
+            doc_id="who2024", score=0.88)
 source1 = connect_csql()
+build!(builder1, source1.db)
+
+# Build second atlas
+builder2 = AtlasBuilder()
+add_triple!(builder2, "Exercise", "reduces", "Heart disease";
+            doc_id="nhs2024", score=0.82)
+add_triple!(builder2, "Smoking", "causes", "Lung cancer";
+            doc_id="nhs2024", score=0.91)
 source2 = connect_csql()
+build!(builder2, source2.db)
 
-# ... build source1 and source2 ...
-
+# Merge into target
+target = connect_csql()
 merge_atlases!(target, [source1, source2])
+
+backbone(target)
 ```
