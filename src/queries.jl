@@ -46,7 +46,7 @@ end
 Extract the causal backbone: highest-scoring edges in the atlas.
 """
 function backbone(csql::CSQLDatabase; limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
@@ -54,7 +54,7 @@ function backbone(csql::CSQLDatabase; limit::Int=20)
         JOIN atlas_nodes n2 ON e.dst_id = n2.node_id
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, (limit,))
+    """, (limit,)))
 end
 
 # ─── Causal Hubs ─────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ end
 Identify the most influential causal concepts by outgoing score mass.
 """
 function causal_hubs(csql::CSQLDatabase; limit::Int=10)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT n.label_canon AS concept,
                SUM(e.score_sum) AS out_mass,
                COUNT(*) AS n_edges,
@@ -75,7 +75,7 @@ function causal_hubs(csql::CSQLDatabase; limit::Int=10)
         GROUP BY n.node_id, n.label_canon, n.deg_out, n.deg_in
         ORDER BY out_mass DESC
         LIMIT ?
-    """, (limit,))
+    """, (limit,)))
 end
 
 # ─── Effects Of ──────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ end
 Find downstream effects of a concept (outgoing edges from concept).
 """
 function effects_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
@@ -95,7 +95,7 @@ function effects_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
         WHERE LOWER(n1.label_canon) LIKE ?
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", limit))
+    """, ("%" * lowercase(concept) * "%", limit)))
 end
 
 # ─── Causes Of ───────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ end
 Find upstream causes of a concept (incoming edges to concept).
 """
 function causes_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
@@ -115,7 +115,7 @@ function causes_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
         WHERE LOWER(n2.label_canon) LIKE ?
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", limit))
+    """, ("%" * lowercase(concept) * "%", limit)))
 end
 
 # ─── Multi-hop Causal Paths ──────────────────────────────────────────────────
@@ -179,7 +179,7 @@ function causal_paths(csql::CSQLDatabase; depth::Int=2, min_score::Float64=0.0, 
     )
 
     params = tuple(fill(min_score, depth)..., limit)
-    _query(csql, sql, params)
+    CausalResult(_query(csql, sql, params))
 end
 
 # ─── Feedback Loops ──────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ end
 Detect 2-cycles (mutual influence) in the causal atlas.
 """
 function feedback_loops(csql::CSQLDatabase)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT n1.label_canon AS a, e1.rel_type AS r1,
                n2.label_canon AS b, e2.rel_type AS r2,
                (e1.score_sum + e2.score_sum) AS loop_score
@@ -200,7 +200,7 @@ function feedback_loops(csql::CSQLDatabase)
         JOIN atlas_nodes n2 ON e1.dst_id = n2.node_id
         WHERE e1.src_id < e1.dst_id
         ORDER BY loop_score DESC
-    """)
+    """))
 end
 
 # ─── Controversial Claims ───────────────────────────────────────────────────
@@ -211,7 +211,7 @@ end
 Find edges with mixed directional evidence (high controversy score).
 """
 function controversial_claims(csql::CSQLDatabase; threshold::Float64=0.1, limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.controversy, e.pol_mass_inc, e.pol_mass_dec,
                e.support_lcms, e.score_sum
@@ -221,7 +221,7 @@ function controversial_claims(csql::CSQLDatabase; threshold::Float64=0.1, limit:
         WHERE e.controversy > ?
         ORDER BY e.controversy DESC
         LIMIT ?
-    """, (threshold, limit))
+    """, (threshold, limit)))
 end
 
 # ─── Statistics ──────────────────────────────────────────────────────────────
@@ -269,5 +269,5 @@ Execute a custom SQL query against the CSQL database.
 Use table names directly: atlas_nodes, atlas_edges, atlas_edge_support, atlas_scc.
 """
 function custom_query(csql::CSQLDatabase, sql::AbstractString; params=())
-    _query(csql, sql, params)
+    CausalResult(_query(csql, sql, params))
 end

@@ -34,6 +34,7 @@ CSQL.reset!
 
 ```@docs
 CSQL._query
+CSQL._show_table
 ```
 
 ## SCC

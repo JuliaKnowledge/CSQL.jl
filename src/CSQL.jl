@@ -19,12 +19,15 @@ include("models.jl")
 include("canonicalization.jl")
 include("schema.jl")
 include("builder.jl")
+include("result.jl")
 include("queries.jl")
 include("counterfactual.jl")
 include("merger.jl")
 include("scc.jl")
+include("show.jl")
 
-export RelationType, Polarity, CausalTriple, LocalCausalModel,
+export CausalResult,
+       RelationType, Polarity, CausalTriple, LocalCausalModel,
        NodeRecord, EdgeRecord, EdgeSupportRecord, SCCRecord,
        CAUSES, INFLUENCES, INCREASES, REDUCES, AFFECTS, LEADS_TO,
        PREVENTS, ENABLES, TREATS, TARGETS, INHIBITS, ACTIVATES,

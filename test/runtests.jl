@@ -92,11 +92,11 @@ using CSQL
         loops = feedback_loops(csql)
         # Our data has host_susceptibility → transmission_rate and
         # via population_immunity → host_susceptibility but these are not direct 2-cycles
-        @test loops isa Vector
+        @test loops isa CausalResult
 
         # Controversial claims
         controv = controversial_claims(csql; threshold=0.0)
-        @test controv isa Vector
+        @test controv isa CausalResult
     end
 
     @testset "Counterfactual (do-cut)" begin

@@ -8,7 +8,7 @@ Returns the backbone of the atlas *after* the intervention.
 This implements Pearl's do-operator as a SQL view rewrite.
 """
 function do_cut(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
@@ -17,7 +17,7 @@ function do_cut(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
         WHERE LOWER(n1.label_canon) NOT LIKE ?
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", limit))
+    """, ("%" * lowercase(concept) * "%", limit)))
 end
 
 """
@@ -28,7 +28,7 @@ Returns the backbone with adjusted scores.
 """
 function soft_do(csql::CSQLDatabase, concept::AbstractString;
                  attenuation::Float64=0.2, limit::Int=20)
-    _query(csql, """
+    CausalResult(_query(csql, """
         SELECT e.rel_type, n1.label_canon AS src, n2.label_canon AS dst,
                e.support_lcms,
                CASE WHEN LOWER(n1.label_canon) LIKE ?
@@ -41,7 +41,7 @@ function soft_do(csql::CSQLDatabase, concept::AbstractString;
         JOIN atlas_nodes n2 ON e.dst_id = n2.node_id
         ORDER BY score_sum_adj DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", attenuation, limit))
+    """, ("%" * lowercase(concept) * "%", attenuation, limit)))
 end
 
 """
@@ -56,7 +56,7 @@ function do_cut_diff(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
 
     # Edges that appear in baseline but not counterfactual
     cf_set = Set((r.src, r.dst, r.rel_type) for r in cf)
-    removed = [r for r in base if !((r.src, r.dst, r.rel_type) in cf_set)]
+    removed = CausalResult([r for r in base if !((r.src, r.dst, r.rel_type) in cf_set)])
 
     (baseline=base, counterfactual=cf, removed=removed)
 end

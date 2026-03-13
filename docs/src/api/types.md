@@ -23,6 +23,12 @@ EdgeSupportRecord
 SCCRecord
 ```
 
+## Query Results
+
+```@docs
+CausalResult
+```
+
 ## Database
 
 ```@docs
