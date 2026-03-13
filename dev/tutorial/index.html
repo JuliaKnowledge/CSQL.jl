@@ -20,24 +20,24 @@ add_triple!(builder, &quot;Transmission&quot;, &quot;increases&quot;, &quot;Outb
 )
 add_lcm!(builder, lcm)</code></pre><h2 id="Building-the-Database"><a class="docs-heading-anchor" href="#Building-the-Database">Building the Database</a><a id="Building-the-Database-1"></a><a class="docs-heading-anchor-permalink" href="#Building-the-Database" title="Permalink"></a></h2><p>Connect to a database backend and build:</p><pre><code class="language-julia hljs">csql = connect_csql()           # in-memory SQLite (default)
 build!(builder, csql.db)</code></pre><h2 id="Querying"><a class="docs-heading-anchor" href="#Querying">Querying</a><a id="Querying-1"></a><a class="docs-heading-anchor-permalink" href="#Querying" title="Permalink"></a></h2><h3 id="Backbone"><a class="docs-heading-anchor" href="#Backbone">Backbone</a><a id="Backbone-1"></a><a class="docs-heading-anchor-permalink" href="#Backbone" title="Permalink"></a></h3><p>The backbone extracts the highest-scoring edges in the atlas:</p><pre><code class="language-julia hljs">backbone(csql)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4 rows:
-rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  transmission  outbreak severity    2             1.95       inc     
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     </code></pre><h3 id="Causal-Hubs"><a class="docs-heading-anchor" href="#Causal-Hubs">Causal Hubs</a><a id="Causal-Hubs-1"></a><a class="docs-heading-anchor-permalink" href="#Causal-Hubs" title="Permalink"></a></h3><p>Identify the most influential causal concepts:</p><pre><code class="language-julia hljs">causal_hubs(csql)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
+src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+transmission  INCREASES  outbreak severity    2             1.95       inc     
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     </code></pre><h3 id="Causal-Hubs"><a class="docs-heading-anchor" href="#Causal-Hubs">Causal Hubs</a><a id="Causal-Hubs-1"></a><a class="docs-heading-anchor-permalink" href="#Causal-Hubs" title="Permalink"></a></h3><p>Identify the most influential causal concepts:</p><pre><code class="language-julia hljs">causal_hubs(csql)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
 concept       out_mass  n_edges  deg_out  deg_in
 ────────────  ────────  ───────  ───────  ──────
 transmission  1.95      1        1        1     
 contact rate  1.85      1        1        0     
 vaccination   1.8       2        2        0     </code></pre><h3 id="Causal-Effects"><a class="docs-heading-anchor" href="#Causal-Effects">Causal Effects</a><a id="Causal-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#Causal-Effects" title="Permalink"></a></h3><p>Find downstream effects of a concept:</p><pre><code class="language-julia hljs">effects_of(csql, &quot;vaccination&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2 rows:
-rel_type   src          dst                  support_lcms  score_sum  polarity
-─────────  ───────────  ───────────────────  ────────────  ─────────  ────────
-REDUCES    vaccination  susceptibility       1             0.92       dec     
-INCREASES  vaccination  population immunity  1             0.88       inc     </code></pre><p>Find upstream causes:</p><pre><code class="language-julia hljs">causes_of(csql, &quot;transmission&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
-rel_type   src           dst           support_lcms  score_sum  polarity
-─────────  ────────────  ────────────  ────────────  ─────────  ────────
-INCREASES  contact rate  transmission  2             1.85       inc     </code></pre><h3 id="Multi-hop-Paths"><a class="docs-heading-anchor" href="#Multi-hop-Paths">Multi-hop Paths</a><a id="Multi-hop-Paths-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-hop-Paths" title="Permalink"></a></h3><p>Find 2-hop causal chains (A→B→C):</p><pre><code class="language-julia hljs">causal_paths(csql; depth=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
+src          rel_type   dst                  support_lcms  score_sum  polarity
+───────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+vaccination  REDUCES    susceptibility       1             0.92       dec     
+vaccination  INCREASES  population immunity  1             0.88       inc     </code></pre><p>Find upstream causes:</p><pre><code class="language-julia hljs">causes_of(csql, &quot;transmission&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
+src           rel_type   dst           support_lcms  score_sum  polarity
+────────────  ─────────  ────────────  ────────────  ─────────  ────────
+contact rate  INCREASES  transmission  2             1.85       inc     </code></pre><h3 id="Multi-hop-Paths"><a class="docs-heading-anchor" href="#Multi-hop-Paths">Multi-hop Paths</a><a id="Multi-hop-Paths-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-hop-Paths" title="Permalink"></a></h3><p>Find 2-hop causal chains (A→B→C):</p><pre><code class="language-julia hljs">causal_paths(csql; depth=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
 a             r1         b             r2         c                  path_score
 ────────────  ─────────  ────────────  ─────────  ─────────────────  ──────────
 contact rate  INCREASES  transmission  INCREASES  outbreak severity  3.8       </code></pre><h3 id="Feedback-Loops"><a class="docs-heading-anchor" href="#Feedback-Loops">Feedback Loops</a><a id="Feedback-Loops-1"></a><a class="docs-heading-anchor-permalink" href="#Feedback-Loops" title="Permalink"></a></h3><p>Detect 2-cycles (mutual influence):</p><pre><code class="language-julia hljs">feedback_loops(csql)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0 rows:
@@ -54,42 +54,42 @@ edge_id               src_id                dst_id                rel_type   pol
 -8735460355462306309  480358612526969278    -2006771831533274064  REDUCES    dec       1             1             0.92       0.92        0.92       0.0           0.92          0.0           0.0          original  1.0         not_evaluated  unknown       0.0          0           
 8533772574147066320   -5072584737868952026  7136595586317367883   INCREASES  inc       2             1             1.85       0.925       1.0        1.85          0.0           0.0           0.0          original  1.0         not_evaluated  unknown       0.0          0           
 -2968820338932470882  7136595586317367883   8434512338201221869   INCREASES  inc       2             1             1.95       0.975       1.0        1.95          0.0           0.0           0.0          original  1.0         not_evaluated  unknown       0.0          0           </code></pre><h2 id="Counterfactual-Reasoning"><a class="docs-heading-anchor" href="#Counterfactual-Reasoning">Counterfactual Reasoning</a><a id="Counterfactual-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Counterfactual-Reasoning" title="Permalink"></a></h2><p>CSQL.jl implements Pearl&#39;s do-operator for causal interventions.</p><h3 id="Hard-Intervention-(do-cut)"><a class="docs-heading-anchor" href="#Hard-Intervention-(do-cut)">Hard Intervention (do-cut)</a><a id="Hard-Intervention-(do-cut)-1"></a><a class="docs-heading-anchor-permalink" href="#Hard-Intervention-(do-cut)" title="Permalink"></a></h3><p>Remove all outgoing edges from a concept:</p><pre><code class="language-julia hljs">do_cut(csql, &quot;transmission&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
-rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     </code></pre><h3 id="Soft-Intervention"><a class="docs-heading-anchor" href="#Soft-Intervention">Soft Intervention</a><a id="Soft-Intervention-1"></a><a class="docs-heading-anchor-permalink" href="#Soft-Intervention" title="Permalink"></a></h3><p>Attenuate outgoing edge scores:</p><pre><code class="language-julia hljs">soft_do(csql, &quot;transmission&quot;; attenuation=0.2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4 rows:
-rel_type   src           dst                  support_lcms  score_sum_adj  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────────  ────────
-INCREASES  contact rate  transmission         2             1.85           inc     
-REDUCES    vaccination   susceptibility       1             0.92           dec     
-INCREASES  vaccination   population immunity  1             0.88           inc     
-INCREASES  transmission  outbreak severity    2             0.39           inc     </code></pre><h3 id="Counterfactual-Comparison"><a class="docs-heading-anchor" href="#Counterfactual-Comparison">Counterfactual Comparison</a><a id="Counterfactual-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Counterfactual-Comparison" title="Permalink"></a></h3><p>Compare baseline vs. intervention:</p><pre><code class="language-julia hljs">baseline, counterfactual, removed = do_cut_diff(csql, &quot;transmission&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(baseline = rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  transmission  outbreak severity    2             1.95       inc     
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     , counterfactual = rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     , removed = rel_type   src           dst                support_lcms  score_sum  polarity
-─────────  ────────────  ─────────────────  ────────────  ─────────  ────────
-INCREASES  transmission  outbreak severity  2             1.95       inc     )</code></pre><p>Baseline backbone:</p><pre><code class="language-julia hljs">baseline</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4 rows:
-rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  transmission  outbreak severity    2             1.95       inc     
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     </code></pre><p>After intervention:</p><pre><code class="language-julia hljs">counterfactual</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
-rel_type   src           dst                  support_lcms  score_sum  polarity
-─────────  ────────────  ───────────────────  ────────────  ─────────  ────────
-INCREASES  contact rate  transmission         2             1.85       inc     
-REDUCES    vaccination   susceptibility       1             0.92       dec     
-INCREASES  vaccination   population immunity  1             0.88       inc     </code></pre><p>Removed edges:</p><pre><code class="language-julia hljs">removed</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
-rel_type   src           dst                support_lcms  score_sum  polarity
-─────────  ────────────  ─────────────────  ────────────  ─────────  ────────
-INCREASES  transmission  outbreak severity  2             1.95       inc     </code></pre><h2 id="Merging-Atlases"><a class="docs-heading-anchor" href="#Merging-Atlases">Merging Atlases</a><a id="Merging-Atlases-1"></a><a class="docs-heading-anchor-permalink" href="#Merging-Atlases" title="Permalink"></a></h2><p>Combine causal databases from multiple sources:</p><pre><code class="language-julia hljs">using CSQL
+src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     </code></pre><h3 id="Soft-Intervention"><a class="docs-heading-anchor" href="#Soft-Intervention">Soft Intervention</a><a id="Soft-Intervention-1"></a><a class="docs-heading-anchor-permalink" href="#Soft-Intervention" title="Permalink"></a></h3><p>Attenuate outgoing edge scores:</p><pre><code class="language-julia hljs">soft_do(csql, &quot;transmission&quot;; attenuation=0.2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4 rows:
+src           rel_type   dst                  support_lcms  score_sum_adj  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────────  ────────
+contact rate  INCREASES  transmission         2             1.85           inc     
+vaccination   REDUCES    susceptibility       1             0.92           dec     
+vaccination   INCREASES  population immunity  1             0.88           inc     
+transmission  INCREASES  outbreak severity    2             0.39           inc     </code></pre><h3 id="Counterfactual-Comparison"><a class="docs-heading-anchor" href="#Counterfactual-Comparison">Counterfactual Comparison</a><a id="Counterfactual-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Counterfactual-Comparison" title="Permalink"></a></h3><p>Compare baseline vs. intervention:</p><pre><code class="language-julia hljs">baseline, counterfactual, removed = do_cut_diff(csql, &quot;transmission&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(baseline = src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+transmission  INCREASES  outbreak severity    2             1.95       inc     
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     , counterfactual = src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     , removed = src           rel_type   dst                support_lcms  score_sum  polarity
+────────────  ─────────  ─────────────────  ────────────  ─────────  ────────
+transmission  INCREASES  outbreak severity  2             1.95       inc     )</code></pre><p>Baseline backbone:</p><pre><code class="language-julia hljs">baseline</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4 rows:
+src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+transmission  INCREASES  outbreak severity    2             1.95       inc     
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     </code></pre><p>After intervention:</p><pre><code class="language-julia hljs">counterfactual</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
+src           rel_type   dst                  support_lcms  score_sum  polarity
+────────────  ─────────  ───────────────────  ────────────  ─────────  ────────
+contact rate  INCREASES  transmission         2             1.85       inc     
+vaccination   REDUCES    susceptibility       1             0.92       dec     
+vaccination   INCREASES  population immunity  1             0.88       inc     </code></pre><p>Removed edges:</p><pre><code class="language-julia hljs">removed</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1 row:
+src           rel_type   dst                support_lcms  score_sum  polarity
+────────────  ─────────  ─────────────────  ────────────  ─────────  ────────
+transmission  INCREASES  outbreak severity  2             1.95       inc     </code></pre><h2 id="Merging-Atlases"><a class="docs-heading-anchor" href="#Merging-Atlases">Merging Atlases</a><a id="Merging-Atlases-1"></a><a class="docs-heading-anchor-permalink" href="#Merging-Atlases" title="Permalink"></a></h2><p>Combine causal databases from multiple sources:</p><pre><code class="language-julia hljs">using CSQL
 
 # Build first atlas
 builder1 = AtlasBuilder()
@@ -114,8 +114,8 @@ target = connect_csql()
 merge_atlases!(target, [source1, source2])
 
 backbone(target)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3 rows:
-rel_type   src       dst            support_lcms  score_sum  polarity
-─────────  ────────  ─────────────  ────────────  ─────────  ────────
-CAUSES     smoking   lung cancer    2             1.86       unk     
-INCREASES  smoking   heart disease  1             0.88       inc     
-REDUCES    exercise  heart disease  1             0.82       dec     </code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../api/types/">Types »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 13 March 2026 10:03">Friday 13 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+src       rel_type   dst            support_lcms  score_sum  polarity
+────────  ─────────  ─────────────  ────────────  ─────────  ────────
+smoking   CAUSES     lung cancer    2             1.86       unk     
+smoking   INCREASES  heart disease  1             0.88       inc     
+exercise  REDUCES    heart disease  1             0.82       dec     </code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../api/types/">Types »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 13 March 2026 11:28">Friday 13 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
