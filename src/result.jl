@@ -20,3 +20,6 @@ Base.firstindex(r::CausalResult) = firstindex(r.rows)
 Base.lastindex(r::CausalResult) = lastindex(r.rows)
 Base.eltype(::Type{CausalResult}) = NamedTuple
 Base.isempty(r::CausalResult) = isempty(r.rows)
+Base.collect(r::CausalResult) = collect(r.rows)
+Base.map(f, r::CausalResult) = map(f, r.rows)
+Base.filter(f, r::CausalResult) = CausalResult(filter(f, r.rows), r.label)

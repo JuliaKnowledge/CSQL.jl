@@ -3,16 +3,17 @@
 
 A Julia implementation of the Csql causal database framework (arXiv:2601.08109).
 Builds SQL-queryable causal databases from extracted causal claims, supporting
-backbone extraction, hub detection, causal path queries, counterfactual reasoning
-(do-cut), and multi-atlas merging.
+backbone extraction, hub detection, causal path queries, outgoing-edge
+interventions, and multi-atlas merging.
 
-Uses DBInterface.jl for generic database backends (default: SQLite).
+Uses DBInterface.jl with SQLite (default) and DuckDB backends.
 """
 module CSQL
 
 using DBInterface
 using SQLite
 using DuckDB
+using SHA
 using Tables
 
 include("models.jl")

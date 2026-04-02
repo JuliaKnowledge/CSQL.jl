@@ -9,13 +9,13 @@ CSQL.jl builds SQL-queryable causal databases from extracted causal claims (trip
 - **Backbone extraction** — highest-scoring causal relationships
 - **Hub detection** — most influential causal concepts
 - **Causal path queries** — multi-hop causal chains (A→B→C)
-- **Counterfactual reasoning** — hard/soft do-cut interventions
-- **Feedback loop detection** — cycles via Tarjan's SCC algorithm
+- **Counterfactual reasoning** — outgoing-edge do-cut interventions
+- **Feedback loop detection** — strongly connected component summaries
 - **Atlas merging** — combine causal databases from multiple sources
 - **Provenance tracking** — link edges to source documents and LCMs
 - **Controversy detection** — edges with mixed directional evidence
 
-Uses [DBInterface.jl](https://github.com/JuliaDatabases/DBInterface.jl) for generic database backends (default: [SQLite.jl](https://github.com/JuliaDatabases/SQLite.jl)).
+Uses [DBInterface.jl](https://github.com/JuliaDatabases/DBInterface.jl) with supported [SQLite.jl](https://github.com/JuliaDatabases/SQLite.jl) (default) and [DuckDB.jl](https://github.com/duckdb/duckdb-julia) backends.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ build!(builder, csql.db)
 backbone(csql)
 
 # Find effects of vaccination
-effects_of(csql, "vaccination")
+effects_of(csql, "vaccination"; exact=true)
 
 # Detect causal hubs
 causal_hubs(csql)
@@ -50,9 +50,12 @@ causal_hubs(csql)
 # Multi-hop causal paths
 causal_paths(csql; depth=2)
 
-# Counterfactual: what happens without transmission?
+# Counterfactual: what happens if transmission can no longer affect downstream concepts?
 do_cut(csql, "transmission")
 ```
+
+`build!(builder, db)` rewrites the atlas tables in `db`, so rerunning it with a
+new builder state replaces stale nodes, edges, support rows, and SCC metadata.
 
 ## Schema
 
@@ -72,14 +75,14 @@ CSQL creates four tables:
 - `AtlasBuilder(; min_edges, rel_whitelist, rel_blacklist)` — create builder
 - `add_triple!(builder, subject, relation, object; doc_id, score, ...)` — add claim
 - `add_lcm!(builder, lcm)` — add a `LocalCausalModel`
-- `build!(builder, db)` — finalize and write to database
+- `build!(builder, db)` — finalize and overwrite atlas tables in the target database
 
 ### Querying
 
 - `backbone(csql; limit)` — strongest causal claims
 - `causal_hubs(csql; limit)` — most influential concepts
-- `effects_of(csql, concept)` — downstream effects
-- `causes_of(csql, concept)` — upstream causes
+- `effects_of(csql, concept; exact=false)` — downstream effects
+- `causes_of(csql, concept; exact=false)` — upstream causes
 - `causal_paths(csql; depth, limit)` — multi-hop chains
 - `feedback_loops(csql)` — 2-cycles
 - `controversial_claims(csql; threshold)` — mixed evidence
@@ -88,7 +91,7 @@ CSQL creates four tables:
 
 ### Counterfactual
 
-- `do_cut(csql, concept)` — hard intervention (remove outgoing edges)
+- `do_cut(csql, concept)` — outgoing-edge intervention
 - `soft_do(csql, concept; attenuation)` — attenuate outgoing scores
 - `do_cut_diff(csql, concept)` — compare baseline vs intervention
 

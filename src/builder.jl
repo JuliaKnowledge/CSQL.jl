@@ -41,6 +41,46 @@ function reset!(builder::AtlasBuilder)
     builder
 end
 
+function _finalize_edge_metrics!(edges::Dict{Int64,EdgeRecord},
+                                 doc_tracker::AbstractDict{Int64,<:AbstractSet{String}},
+                                 score_tracker::AbstractDict{Int64,<:AbstractVector{<:Real}})
+    for (eid, edge) in edges
+        docs = get(doc_tracker, eid, nothing)
+        scores = get(score_tracker, eid, nothing)
+
+        edge.support_docs = docs === nothing ? 0 : length(docs)
+        if scores !== nothing && !isempty(scores)
+            edge.support_lcms = length(scores)
+            edge.score_sum = sum(scores)
+            edge.score_mean = edge.score_sum / length(scores)
+            edge.score_max = maximum(scores)
+        else
+            edge.support_lcms = 0
+            edge.score_sum = 0.0
+            edge.score_mean = 0.0
+            edge.score_max = 0.0
+        end
+
+        total_pol = edge.pol_mass_inc + edge.pol_mass_dec
+        edge.controversy = total_pol > 0 ? min(edge.pol_mass_inc, edge.pol_mass_dec) / (total_pol + 1e-9) : 0.0
+    end
+end
+
+function _recompute_node_degrees!(nodes::Dict{Int64,NodeRecord}, edges::Dict{Int64,EdgeRecord})
+    for node in values(nodes)
+        node.deg_in = 0
+        node.deg_out = 0
+    end
+    for edge in values(edges)
+        if haskey(nodes, edge.src_id)
+            nodes[edge.src_id].deg_out += 1
+        end
+        if haskey(nodes, edge.dst_id)
+            nodes[edge.dst_id].deg_in += 1
+        end
+    end
+end
+
 """
     add_triple!(builder, subject, relation, object;
                 doc_id="default", lcm_id="default", score=1.0,
@@ -173,44 +213,22 @@ end
 """
     build!(builder, db) -> db
 
-Finalize the atlas and write all tables to the database.
+Finalize the atlas and overwrite the target atlas tables in `db`.
 """
 function build!(builder::AtlasBuilder, db)
     create_schema!(db)
 
-    # Finalize edges: compute derived fields
-    for (eid, edge) in builder.edges
-        scores = get(builder.score_tracker, eid, Float64[])
-        edge.support_docs = length(get(builder.doc_tracker, eid, Set{String}()))
-        if !isempty(scores)
-            edge.score_mean = edge.score_sum / length(scores)
-            edge.score_max = maximum(scores)
-        end
-        total_pol = edge.pol_mass_inc + edge.pol_mass_dec
-        edge.controversy = total_pol > 0 ? min(edge.pol_mass_inc, edge.pol_mass_dec) / (total_pol + 1e-9) : 0.0
-    end
-
-    # Compute node degrees
-    for node in values(builder.nodes)
-        node.deg_in = 0
-        node.deg_out = 0
-    end
-    for edge in values(builder.edges)
-        if haskey(builder.nodes, edge.src_id)
-            builder.nodes[edge.src_id].deg_out += 1
-        end
-        if haskey(builder.nodes, edge.dst_id)
-            builder.nodes[edge.dst_id].deg_in += 1
-        end
-    end
+    _finalize_edge_metrics!(builder.edges, builder.doc_tracker, builder.score_tracker)
+    _recompute_node_degrees!(builder.nodes, builder.edges)
 
     # Write to database inside a transaction
     DBInterface.execute(db, "BEGIN TRANSACTION")
     try
+        _clear_atlas_tables!(db)
         _write_nodes!(db, builder.nodes)
         _write_edges!(db, builder.edges)
         _write_support!(db, builder.support_rows)
-        _write_sccs!(db, builder.edges, builder.nodes)
+        _write_sccs!(db, builder.edges, builder.nodes, builder.doc_tracker)
         DBInterface.execute(db, "COMMIT")
     catch
         DBInterface.execute(db, "ROLLBACK")
@@ -267,8 +285,9 @@ function _write_support!(db, rows::Vector{EdgeSupportRecord})
     DBInterface.close!(stmt)
 end
 
-function _write_sccs!(db, edges::Dict{Int64,EdgeRecord}, nodes::Dict{Int64,NodeRecord})
-    sccs = compute_sccs(edges, nodes)
+function _write_sccs!(db, edges::Dict{Int64,EdgeRecord}, nodes::Dict{Int64,NodeRecord},
+                      edge_doc_ids::AbstractDict{Int64,<:AbstractSet{String}}=Dict{Int64,Set{String}}())
+    sccs = compute_sccs(edges, nodes, edge_doc_ids)
     isempty(sccs) && return
     stmt = DBInterface.prepare(db,
         "INSERT OR REPLACE INTO atlas_scc (scc_id, n_nodes, n_edges, support_docs, top_nodes, node_ids) VALUES (?,?,?,?,?,?)")

@@ -7,6 +7,8 @@ using CSQL
         @test CSQL.canonicalize_label("  Bipedalism  ") == "bipedalism"
         @test CSQL.canonicalize_label("Energy Efficiency") == "energy efficiency"
         @test CSQL.canonicalize_label("A–B") == "a-b"
+        @test CSQL.compute_node_id("alpha") == -3136148774901449766
+        @test CSQL.compute_edge_id(CSQL.compute_node_id("a"), CAUSES, CSQL.compute_node_id("b")) == -3604023202922358384
 
         @test CSQL.normalize_relation("causes")[1] == CAUSES
         @test CSQL.normalize_relation("increases")[1] == INCREASES
@@ -126,6 +128,22 @@ using CSQL
         @test length(diff.removed) == 2  # A→B and A→C removed
     end
 
+    @testset "Counterfactual diff uses full atlas" begin
+        builder = AtlasBuilder()
+        for i in 1:15
+            add_triple!(builder, "A", "increases", "B$i"; score=16.0 - i)
+        end
+
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        diff = do_cut_diff(csql, "a"; limit=10)
+        @test length(diff.baseline) == 10
+        @test length(diff.counterfactual) == 0
+        @test length(diff.removed) == 10
+        @test length(do_cut_diff(csql, "a"; limit=30).removed) == 15
+    end
+
     @testset "LCM Builder" begin
         lcm = LocalCausalModel("lcm_001", "doc_001",
             [CausalTriple("X", "causes", "Y"),
@@ -171,6 +189,28 @@ using CSQL
         @test ab[1].score_sum ≈ 1.8  # 1.0 + 0.8
     end
 
+    @testset "Atlas Merging preserves support semantics" begin
+        b1 = AtlasBuilder()
+        add_triple!(b1, "A", "increases", "B"; doc_id="shared", lcm_id="l1", score=1.0)
+        add_triple!(b1, "A", "increases", "B"; doc_id="doc1", lcm_id="l2", score=0.5)
+        csql1 = connect_csql()
+        build!(b1, csql1.db)
+
+        b2 = AtlasBuilder()
+        add_triple!(b2, "A", "increases", "B"; doc_id="shared", lcm_id="l3", score=0.8)
+        csql2 = connect_csql()
+        build!(b2, csql2.db)
+
+        merged = connect_csql()
+        merge_atlases!(merged, [csql1, csql2])
+
+        edge = only(custom_query(merged, "SELECT support_lcms, support_docs, score_sum, score_mean FROM atlas_edges"))
+        @test edge.support_lcms == 3
+        @test edge.support_docs == 2
+        @test edge.score_sum ≈ 2.3
+        @test edge.score_mean ≈ (2.3 / 3)
+    end
+
     @testset "SCC Detection" begin
         builder = AtlasBuilder()
         # Create a feedback loop: A→B→C→A
@@ -189,6 +229,36 @@ using CSQL
         @test sccs[1].n_nodes == 3
     end
 
+    @testset "SCC support docs and merge rebuild" begin
+        builder = AtlasBuilder()
+        add_triple!(builder, "A", "increases", "B"; doc_id="doc1", score=1.0)
+        add_triple!(builder, "B", "increases", "C"; doc_id="doc2", score=0.9)
+        add_triple!(builder, "C", "increases", "A"; doc_id="doc3", score=0.8)
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        scc = only(custom_query(csql, "SELECT support_docs FROM atlas_scc"))
+        @test scc.support_docs == 3
+
+        b1 = AtlasBuilder()
+        add_triple!(b1, "A", "increases", "B"; doc_id="doc1", score=1.0)
+        add_triple!(b1, "B", "increases", "C"; doc_id="doc2", score=0.9)
+        csql1 = connect_csql()
+        build!(b1, csql1.db)
+
+        b2 = AtlasBuilder()
+        add_triple!(b2, "C", "increases", "A"; doc_id="doc3", score=0.8)
+        csql2 = connect_csql()
+        build!(b2, csql2.db)
+
+        merged = connect_csql()
+        merge_atlases!(merged, [csql1, csql2])
+
+        merged_scc = only(custom_query(merged, "SELECT n_nodes, support_docs FROM atlas_scc"))
+        @test merged_scc.n_nodes == 3
+        @test merged_scc.support_docs == 3
+    end
+
     @testset "Custom Query" begin
         builder = AtlasBuilder()
         add_triple!(builder, "X", "causes", "Y"; score=1.5)
@@ -205,6 +275,26 @@ using CSQL
         @test rows[1].src == "x"
         @test rows[1].dst == "y"
         @test rows[1].score_sum ≈ 1.5
+    end
+
+    @testset "Exact query matching and empty statistics" begin
+        builder = AtlasBuilder()
+        add_triple!(builder, "Heart rate", "increases", "Blood pressure"; score=1.0)
+        add_triple!(builder, "Transmission rate", "increases", "Outbreak severity"; score=0.9)
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        @test length(effects_of(csql, "rate")) == 2
+        @test isempty(effects_of(csql, "rate"; exact=true))
+
+        exact = effects_of(csql, "heart rate"; exact=true)
+        @test length(exact) == 1
+        @test exact[1].dst == "blood pressure"
+
+        empty_stats = statistics(connect_csql())
+        @test empty_stats[:min_score] == 0.0
+        @test empty_stats[:max_score] == 0.0
+        @test empty_stats[:avg_score] == 0.0
     end
 
     @testset "Symmetric Relations" begin
@@ -286,6 +376,50 @@ using CSQL
         # Custom query
         rows = custom_query(csql, "SELECT COUNT(*) AS n FROM atlas_nodes")
         @test rows[1].n == 4
+    end
+
+    @testset "Rebuild overwrites atlas tables" begin
+        builder = AtlasBuilder()
+        add_triple!(builder, "A", "causes", "B"; doc_id="doc1", lcm_id="l1", score=1.0)
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        CSQL.reset!(builder)
+        add_triple!(builder, "X", "causes", "Y"; doc_id="doc2", lcm_id="l2", score=2.0)
+        build!(builder, csql.db)
+
+        stats = statistics(csql)
+        @test stats[:n_nodes] == 2
+        @test stats[:n_edges] == 1
+        @test stats[:n_support] == 1
+
+        edge = only(custom_query(csql, "SELECT score_sum FROM atlas_edges"))
+        @test edge.score_sum ≈ 2.0
+    end
+
+    @testset "Deep causal_paths keeps valid aliases" begin
+        builder = AtlasBuilder()
+        for i in 1:26
+            add_triple!(builder, "N$i", "increases", "N$(i + 1)"; score=1.0)
+        end
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        paths = causal_paths(csql; depth=26, limit=1)
+        @test length(paths) == 1
+        @test hasproperty(paths[1], :n27)
+        @test getproperty(paths[1], :n27) == "n27"
+    end
+
+    @testset "CausalResult behaves like a collection" begin
+        result = CausalResult([(x=1,), (x=2,)], "numbers")
+        @test collect(result) == [(x=1,), (x=2,)]
+        @test map(r -> r.x, result) == [1, 2]
+
+        filtered = filter(r -> r.x == 2, result)
+        @test filtered isa CausalResult
+        @test length(filtered) == 1
+        @test filtered[1].x == 2
     end
 
 end

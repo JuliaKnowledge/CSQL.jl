@@ -2,20 +2,20 @@
 
 A Julia implementation of the **Csql** causal database framework ([arXiv:2601.08109](https://arxiv.org/abs/2601.08109)).
 
-CSQL.jl builds SQL-queryable causal databases from extracted causal claims (triples), supporting backbone extraction, hub detection, causal path queries, counterfactual reasoning, feedback loop detection, atlas merging, provenance tracking, and controversy detection.
+CSQL.jl builds SQL-queryable causal databases from extracted causal claims (triples), supporting backbone extraction, hub detection, causal path queries, outgoing-edge interventions, feedback loop detection, atlas merging, provenance tracking, and controversy detection.
 
 ## Features
 
 - **Backbone extraction** — highest-scoring causal relationships
 - **Hub detection** — most influential causal concepts
 - **Causal path queries** — multi-hop causal chains (A->B->C)
-- **Counterfactual reasoning** — hard/soft do-cut interventions
-- **Feedback loop detection** — cycles via Tarjan's SCC algorithm
+- **Counterfactual reasoning** — outgoing-edge do-cut interventions
+- **Feedback loop detection** — strongly connected component summaries
 - **Atlas merging** — combine causal databases from multiple sources
 - **Provenance tracking** — link edges to source documents and LCMs
 - **Controversy detection** — edges with mixed directional evidence
 
-Uses [DBInterface.jl](https://github.com/JuliaDatabases/DBInterface.jl) for generic database backends (default: [SQLite.jl](https://github.com/JuliaDatabases/SQLite.jl), with [DuckDB.jl](https://github.com/duckdb/duckdb-julia) support).
+Uses [DBInterface.jl](https://github.com/JuliaDatabases/DBInterface.jl) with supported [SQLite.jl](https://github.com/JuliaDatabases/SQLite.jl) (default) and [DuckDB.jl](https://github.com/duckdb/duckdb-julia) backends.
 
 ## Installation
 
@@ -49,11 +49,14 @@ build!(builder, csql.db)
 backbone(csql)
 
 # Find effects of vaccination
-effects_of(csql, "vaccination")
+effects_of(csql, "vaccination"; exact=true)
 
-# Counterfactual: what happens without transmission?
+# Counterfactual: what happens if transmission can no longer affect downstream concepts?
 do_cut(csql, "transmission")
 ```
+
+`build!(builder, db)` rewrites the atlas tables in `db`, so rerunning it with a
+new builder state replaces stale support and SCC metadata as well.
 
 ## Schema
 

@@ -2,10 +2,10 @@
 
 # Backend-specific type mappings
 _int_type(::Type{<:SQLite.DB}) = "INTEGER"
-_int_type(::Any) = "BIGINT"  # DuckDB uses 32-bit INTEGER; need BIGINT for hash IDs
+_int_type(::Any) = "BIGINT"
 
 _autoincrement_col(::Type{<:SQLite.DB}) = "id INTEGER PRIMARY KEY AUTOINCREMENT"
-_autoincrement_col(::Any) = "id BIGINT PRIMARY KEY DEFAULT 0"  # handled externally
+_autoincrement_col(::Any) = "id BIGINT PRIMARY KEY"
 
 function _schema_sql(db)
     IT = _int_type(typeof(db))
@@ -74,6 +74,13 @@ const INDEX_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_nodes_label ON atlas_nodes(label_canon)",
 ]
 
+const TABLE_CLEAR_ORDER = [
+    "atlas_edge_support",
+    "atlas_scc",
+    "atlas_edges",
+    "atlas_nodes",
+]
+
 """
     create_schema!(db)
 
@@ -85,6 +92,13 @@ function create_schema!(db)
     end
     for sql in INDEX_SQL
         DBInterface.execute(db, sql)
+    end
+    db
+end
+
+function _clear_atlas_tables!(db)
+    for table in TABLE_CLEAR_ORDER
+        DBInterface.execute(db, "DELETE FROM $table")
     end
     db
 end

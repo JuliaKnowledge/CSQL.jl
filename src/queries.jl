@@ -38,6 +38,16 @@ function _query(csql::CSQLDatabase, sql::String, params=())
     Tables.rowtable(result)
 end
 
+function _canonical_match(column::AbstractString, concept::AbstractString; exact::Bool=false)
+    canon = canonicalize_label(concept)
+    if exact
+        return "$column = ?", canon
+    end
+    return "$column LIKE ?", "%" * canon * "%"
+end
+
+_real_or_zero(value) = value === nothing || ismissing(value) ? 0.0 : Float64(value)
+
 # ─── Backbone ────────────────────────────────────────────────────────────────
 
 """
@@ -81,41 +91,45 @@ end
 # ─── Effects Of ──────────────────────────────────────────────────────────────
 
 """
-    effects_of(csql, concept; limit=20)
+    effects_of(csql, concept; limit=20, exact=false)
 
 Find downstream effects of a concept (outgoing edges from concept).
+Use `exact=true` to match only the canonical concept label.
 """
-function effects_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
+function effects_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20, exact::Bool=false)
+    predicate, param = _canonical_match("n1.label_canon", concept; exact=exact)
     CausalResult(_query(csql, """
         SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
         JOIN atlas_nodes n2 ON e.dst_id = n2.node_id
-        WHERE LOWER(n1.label_canon) LIKE ?
+        WHERE $predicate
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", limit)))
+    """, (param, limit)))
 end
 
 # ─── Causes Of ───────────────────────────────────────────────────────────────
 
 """
-    causes_of(csql, concept; limit=20)
+    causes_of(csql, concept; limit=20, exact=false)
 
 Find upstream causes of a concept (incoming edges to concept).
+Use `exact=true` to match only the canonical concept label.
 """
-function causes_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20)
+function causes_of(csql::CSQLDatabase, concept::AbstractString; limit::Int=20, exact::Bool=false)
+    predicate, param = _canonical_match("n2.label_canon", concept; exact=exact)
     CausalResult(_query(csql, """
         SELECT n1.label_canon AS src, e.rel_type, n2.label_canon AS dst,
                e.support_lcms, e.score_sum, e.polarity
         FROM atlas_edges e
         JOIN atlas_nodes n1 ON e.src_id = n1.node_id
         JOIN atlas_nodes n2 ON e.dst_id = n2.node_id
-        WHERE LOWER(n2.label_canon) LIKE ?
+        WHERE $predicate
         ORDER BY e.score_sum DESC
         LIMIT ?
-    """, ("%" * lowercase(concept) * "%", limit)))
+    """, (param, limit)))
 end
 
 # ─── Multi-hop Causal Paths ──────────────────────────────────────────────────
@@ -136,9 +150,9 @@ and filtered so that every edge meets `min_score`.
 function causal_paths(csql::CSQLDatabase; depth::Int=2, min_score::Float64=0.0, limit::Int=20)
     depth >= 2 || error("causal_paths: depth must be ≥ 2 (got $depth)")
 
-    # Node column aliases use letters: a, b, c, ...
-    # Relation column aliases: r1, r2, r3, ...
-    node_alias(i) = string(Char('a' + i - 1))
+    # Preserve legacy a/b/c aliases for shallow paths and switch to valid
+    # n27/n28/... aliases for deeper ones.
+    node_alias(i) = i <= 26 ? string(Char('a' + i - 1)) : "n$i"
 
     select_parts = String[]
     for i in 1:depth
@@ -253,9 +267,9 @@ function statistics(csql::CSQLDatabase)
         :n_nodes => n_nodes,
         :n_edges => n_edges,
         :n_support => n_support,
-        :min_score => score_stats.min_score,
-        :max_score => score_stats.max_score,
-        :avg_score => score_stats.avg_score,
+        :min_score => _real_or_zero(score_stats.min_score),
+        :max_score => _real_or_zero(score_stats.max_score),
+        :avg_score => _real_or_zero(score_stats.avg_score),
         :relation_distribution => rel_dist,
     )
 end

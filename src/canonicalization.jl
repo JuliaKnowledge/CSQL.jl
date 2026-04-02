@@ -11,17 +11,29 @@ function canonicalize_label(text::AbstractString)::String
     strip(s)
 end
 
-"""Compute a stable 64-bit node ID from a canonical label."""
-function compute_node_id(canonical_label::String)::Int64
-    h = hash(canonical_label)
-    # Ensure signed 64-bit range
-    reinterpret(Int64, h % UInt64)
+function _stable_int64(parts...)::Int64
+    io = IOBuffer()
+    for (i, part) in enumerate(parts)
+        i > 1 && write(io, UInt8(0x1f))
+        print(io, part)
+    end
+
+    digest = sha256(String(take!(io)))
+    value = zero(UInt64)
+    for byte in @view digest[1:8]
+        value = (value << 8) | UInt64(byte)
+    end
+    reinterpret(Int64, value)
 end
 
-"""Compute a stable edge ID from (src_id, rel_type, dst_id)."""
+"""Compute a deterministic 64-bit node ID from a canonical label."""
+function compute_node_id(canonical_label::String)::Int64
+    _stable_int64("node", canonical_label)
+end
+
+"""Compute a deterministic edge ID from (src_id, rel_type, dst_id)."""
 function compute_edge_id(src_id::Int64, rel_type::RelationType, dst_id::Int64)::Int64
-    key = "$(src_id)||$(rel_type)||$(dst_id)"
-    reinterpret(Int64, hash(key) % UInt64)
+    _stable_int64("edge", src_id, reltype_str(rel_type), dst_id)
 end
 
 # ─── Relation normalization ─────────────────────────────────────────────────
