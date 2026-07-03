@@ -38,12 +38,16 @@ function _query(csql::CSQLDatabase, sql::String, params=())
     Tables.rowtable(result)
 end
 
+function _escape_like_pattern(value::AbstractString)::String
+    replace(value, "\\" => "\\\\", "%" => "\\%", "_" => "\\_")
+end
+
 function _canonical_match(column::AbstractString, concept::AbstractString; exact::Bool=false)
     canon = canonicalize_label(concept)
     if exact
         return "$column = ?", canon
     end
-    return "$column LIKE ?", "%" * canon * "%"
+    return "$column LIKE ? ESCAPE '\\'", "%" * _escape_like_pattern(canon) * "%"
 end
 
 _real_or_zero(value) = value === nothing || ismissing(value) ? 0.0 : Float64(value)

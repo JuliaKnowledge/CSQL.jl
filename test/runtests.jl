@@ -144,6 +144,30 @@ using CSQL
         @test length(do_cut_diff(csql, "a"; limit=30).removed) == 15
     end
 
+    @testset "LIKE escaping avoids underscore wildcard matches" begin
+        builder = AtlasBuilder()
+        add_triple!(builder, "gene_a", "causes", "target 1"; score=1.0)
+        add_triple!(builder, "gene_a", "causes", "target 2"; score=0.7)
+        add_triple!(builder, "genexa", "causes", "off target"; score=0.9)
+
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        effects = effects_of(csql, "gene_a"; limit=10)
+        @test sort(getproperty.(effects, :dst)) == ["target 1", "target 2"]
+        @test all(r.src == "gene_a" for r in effects)
+
+        cf = do_cut(csql, "gene_a"; limit=10)
+        @test length(cf) == 1
+        @test cf[1].src == "genexa"
+
+        soft = soft_do(csql, "gene_a"; attenuation=0.5, limit=10)
+        gene_rows = filter(r -> r.src == "gene_a", soft)
+        other_row = only(filter(r -> r.src == "genexa", soft))
+        @test sort(getproperty.(gene_rows, :score_sum_adj)) ≈ [0.35, 0.5]
+        @test other_row.score_sum_adj ≈ 0.9
+    end
+
     @testset "LCM Builder" begin
         lcm = LocalCausalModel("lcm_001", "doc_001",
             [CausalTriple("X", "causes", "Y"),
@@ -209,6 +233,28 @@ using CSQL
         @test edge.support_docs == 2
         @test edge.score_sum ≈ 2.3
         @test edge.score_mean ≈ (2.3 / 3)
+    end
+
+    @testset "Merge recomputes dominant polarity and unique LCM counts" begin
+        b1 = AtlasBuilder()
+        add_triple!(b1, "Signal", "causes", "Outcome"; doc_id="doc1", lcm_id="l1", score=0.2)
+        add_triple!(b1, "Signal", "causes", "Outcome"; doc_id="doc1b", lcm_id="l1", score=0.3)
+        csql1 = connect_csql()
+        build!(b1, csql1.db)
+
+        b2 = AtlasBuilder()
+        add_triple!(b2, "Signal", "triggers", "Outcome"; doc_id="doc2", lcm_id="l2", score=1.0)
+        csql2 = connect_csql()
+        build!(b2, csql2.db)
+
+        merged = connect_csql()
+        merge_atlases!(merged, [csql1, csql2])
+
+        edge = only(custom_query(merged, "SELECT polarity, support_lcms, pol_mass_inc, pol_mass_unk FROM atlas_edges"))
+        @test edge.polarity == "inc"
+        @test edge.support_lcms == 2
+        @test edge.pol_mass_inc ≈ 1.0
+        @test edge.pol_mass_unk ≈ 0.5
     end
 
     @testset "SCC Detection" begin
@@ -291,6 +337,19 @@ using CSQL
         @test length(exact) == 1
         @test exact[1].dst == "blood pressure"
 
+        @test isempty(do_cut(csql, "rate"; limit=10))
+        @test length(do_cut(csql, "rate"; exact=true, limit=10)) == 2
+
+        soft_fuzzy = soft_do(csql, "rate"; attenuation=0.5, limit=10)
+        @test sort(getproperty.(soft_fuzzy, :score_sum_adj)) ≈ [0.45, 0.5]
+
+        soft_exact = soft_do(csql, "rate"; attenuation=0.5, exact=true, limit=10)
+        @test sort(getproperty.(soft_exact, :score_sum_adj)) ≈ [0.9, 1.0]
+
+        diff_exact = do_cut_diff(csql, "rate"; exact=true, limit=10)
+        @test length(diff_exact.baseline) == 2
+        @test isempty(diff_exact.removed)
+
         empty_stats = statistics(connect_csql())
         @test empty_stats[:min_score] == 0.0
         @test empty_stats[:max_score] == 0.0
@@ -331,6 +390,43 @@ using CSQL
         @test edges[1].support_lcms == 3
         @test edges[1].support_docs == 2  # paper1, paper2
         @test edges[1].score_sum ≈ 2.4
+    end
+
+    @testset "Support rows persist domain and source text" begin
+        lcm = LocalCausalModel("lcm_domain", "doc_domain",
+            [CausalTriple("Gene A", "causes", "Protein B";
+                          domain="genomics",
+                          source_text="Gene A causes Protein B in the assay.")];
+            score=0.95)
+
+        builder = AtlasBuilder()
+        add_lcm!(builder, lcm)
+
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        support = only(custom_query(csql, "SELECT domain, source_text FROM atlas_edge_support"))
+        @test support.domain == "genomics"
+        @test support.source_text == "Gene A causes Protein B in the assay."
+    end
+
+    @testset "Builder recomputes dominant polarity and unique LCM counts" begin
+        builder = AtlasBuilder()
+        add_triple!(builder, "Signal", "causes", "Outcome"; doc_id="doc1", lcm_id="l1", score=0.2)
+        add_triple!(builder, "Signal", "causes", "Outcome"; doc_id="doc1", lcm_id="l1", score=0.3)
+        add_triple!(builder, "Signal", "triggers", "Outcome"; doc_id="doc2", lcm_id="l2", score=1.0)
+
+        csql = connect_csql()
+        build!(builder, csql.db)
+
+        edge = only(custom_query(csql, "SELECT polarity, support_lcms, support_docs, score_sum, score_mean, pol_mass_inc, pol_mass_unk FROM atlas_edges"))
+        @test edge.polarity == "inc"
+        @test edge.support_lcms == 2
+        @test edge.support_docs == 2
+        @test edge.score_sum ≈ 1.5
+        @test edge.score_mean ≈ 0.5
+        @test edge.pol_mass_inc ≈ 1.0
+        @test edge.pol_mass_unk ≈ 0.5
     end
 
     @testset "DuckDB Backend" begin
@@ -376,6 +472,18 @@ using CSQL
         # Custom query
         rows = custom_query(csql, "SELECT COUNT(*) AS n FROM atlas_nodes")
         @test rows[1].n == 4
+
+        edge = only(custom_query(csql, "SELECT score_sum, score_mean, score_max, confidence, specificity FROM atlas_edges ORDER BY score_sum DESC LIMIT 1"))
+        @test edge.score_sum isa Float64
+        @test edge.score_mean isa Float64
+        @test edge.score_max isa Float64
+        @test edge.confidence isa Float64
+        @test edge.specificity isa Float64
+
+        support = only(custom_query(csql, "SELECT score, score_raw, coupling FROM atlas_edge_support LIMIT 1"))
+        @test support.score isa Float64
+        @test support.score_raw isa Float64
+        @test support.coupling isa Float64
     end
 
     @testset "Rebuild overwrites atlas tables" begin

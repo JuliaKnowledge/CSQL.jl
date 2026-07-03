@@ -15,6 +15,7 @@ mutable struct AtlasBuilder
     edges::Dict{Int64, EdgeRecord}
     support_rows::Vector{EdgeSupportRecord}
     doc_tracker::Dict{Int64, Set{String}}  # edge_id → set of doc_ids
+    lcm_tracker::Dict{Int64, Set{String}}  # edge_id → unique lcm_ids
     score_tracker::Dict{Int64, Vector{Float64}}  # edge_id → scores
 
     function AtlasBuilder(; min_edges=1, rel_whitelist=nothing, rel_blacklist=nothing)
@@ -25,6 +26,7 @@ mutable struct AtlasBuilder
             Dict{Int64,NodeRecord}(),
             Dict{Int64,EdgeRecord}(),
             EdgeSupportRecord[],
+            Dict{Int64,Set{String}}(),
             Dict{Int64,Set{String}}(),
             Dict{Int64,Vector{Float64}}(),
         )
@@ -37,30 +39,33 @@ function reset!(builder::AtlasBuilder)
     empty!(builder.edges)
     empty!(builder.support_rows)
     empty!(builder.doc_tracker)
+    empty!(builder.lcm_tracker)
     empty!(builder.score_tracker)
     builder
 end
 
 function _finalize_edge_metrics!(edges::Dict{Int64,EdgeRecord},
                                  doc_tracker::AbstractDict{Int64,<:AbstractSet{String}},
+                                 lcm_tracker::AbstractDict{Int64,<:AbstractSet},
                                  score_tracker::AbstractDict{Int64,<:AbstractVector{<:Real}})
     for (eid, edge) in edges
         docs = get(doc_tracker, eid, nothing)
+        lcms = get(lcm_tracker, eid, nothing)
         scores = get(score_tracker, eid, nothing)
 
         edge.support_docs = docs === nothing ? 0 : length(docs)
+        edge.support_lcms = lcms === nothing ? 0 : length(lcms)
         if scores !== nothing && !isempty(scores)
-            edge.support_lcms = length(scores)
             edge.score_sum = sum(scores)
             edge.score_mean = edge.score_sum / length(scores)
             edge.score_max = maximum(scores)
         else
-            edge.support_lcms = 0
             edge.score_sum = 0.0
             edge.score_mean = 0.0
             edge.score_max = 0.0
         end
 
+        edge.polarity = dominant_polarity(edge.pol_mass_inc, edge.pol_mass_dec, edge.pol_mass_unk)
         total_pol = edge.pol_mass_inc + edge.pol_mass_dec
         edge.controversy = total_pol > 0 ? min(edge.pol_mass_inc, edge.pol_mass_dec) / (total_pol + 1e-9) : 0.0
     end
@@ -93,6 +98,7 @@ function add_triple!(builder::AtlasBuilder, subject::AbstractString,
                      relation::AbstractString, object::AbstractString;
                      doc_id::String="default", lcm_id::String="default",
                      score::Float64=1.0, score_raw::Float64=score,
+                     domain::String="", source_text::String="",
                      stage::String="original", confidence::Float64=1.0,
                      grounded::String="not_evaluated",
                      source_model::String="unknown",
@@ -136,13 +142,17 @@ function add_triple!(builder::AtlasBuilder, subject::AbstractString,
     doc_set = get!(Set{String}, builder.doc_tracker, edge_id)
     push!(doc_set, doc_id)
 
+    # Track unique LCMs
+    lcm_set = get!(Set{String}, builder.lcm_tracker, edge_id)
+    push!(lcm_set, lcm_id)
+
     # Track scores
     scores = get!(Vector{Float64}, builder.score_tracker, edge_id)
     push!(scores, score)
 
     # Add support record
     push!(builder.support_rows, EdgeSupportRecord(
-        edge_id, doc_id, "", lcm_id, score, score_raw, coupling
+        edge_id, doc_id, "", lcm_id, domain, source_text, score, score_raw, coupling
     ))
 
     nothing
@@ -158,6 +168,7 @@ function add_lcm!(builder::AtlasBuilder, lcm::LocalCausalModel)
     for triple in lcm.triples
         add_triple!(builder, triple.subject, triple.relation, triple.object;
                     doc_id=lcm.doc_id, lcm_id=lcm.lcm_id, score=lcm.score,
+                    domain=triple.domain, source_text=triple.source_text,
                     stage=get(lcm.metadata, "stage", "original"),
                     confidence=get(lcm.metadata, "confidence", 1.0),
                     grounded=get(lcm.metadata, "grounded", "not_evaluated"),
@@ -186,8 +197,6 @@ function _update_edge!(builder::AtlasBuilder, edge_id::Int64,
                        grounded::String, source_model::String, specificity::Float64)
     if haskey(builder.edges, edge_id)
         e = builder.edges[edge_id]
-        e.support_lcms += 1
-        e.score_sum += score
         if polarity == INCREASE
             e.pol_mass_inc += score
         elseif polarity == DECREASE
@@ -198,8 +207,8 @@ function _update_edge!(builder::AtlasBuilder, edge_id::Int64,
     else
         builder.edges[edge_id] = EdgeRecord(
             edge_id, src_id, dst_id, rel_type, polarity,
-            1, 0,                    # support_lcms, support_docs (computed at build)
-            score, 0.0, score,       # score_sum, score_mean, score_max
+            0, 0,                    # support_lcms, support_docs (computed at build)
+            0.0, 0.0, 0.0,           # score_sum, score_mean, score_max (computed at build)
             polarity == INCREASE ? score : 0.0,
             polarity == DECREASE ? score : 0.0,
             polarity == UNKNOWN_POL ? score : 0.0,
@@ -218,7 +227,7 @@ Finalize the atlas and overwrite the target atlas tables in `db`.
 function build!(builder::AtlasBuilder, db)
     create_schema!(db)
 
-    _finalize_edge_metrics!(builder.edges, builder.doc_tracker, builder.score_tracker)
+    _finalize_edge_metrics!(builder.edges, builder.doc_tracker, builder.lcm_tracker, builder.score_tracker)
     _recompute_node_degrees!(builder.nodes, builder.edges)
 
     # Write to database inside a transaction
@@ -238,16 +247,28 @@ function build!(builder::AtlasBuilder, db)
     db
 end
 
+function _executemany_rows!(stmt, rows::AbstractVector{<:Tuple})
+    isempty(rows) && return nothing
+    if stmt isa DuckDB.Stmt
+        for row in rows
+            DBInterface.execute(stmt, row)
+        end
+        return nothing
+    end
+    columns = ntuple(i -> [row[i] for row in rows], length(first(rows)))
+    DBInterface.executemany(stmt, columns)
+    nothing
+end
+
 function _write_nodes!(db, nodes::Dict{Int64,NodeRecord})
     stmt = DBInterface.prepare(db,
         "INSERT OR REPLACE INTO atlas_nodes (node_id, label_canon, label_examples, deg_in, deg_out) VALUES (?, ?, ?, ?, ?)")
-    for node in values(nodes)
-        DBInterface.execute(stmt, (
+    rows = [(
             node.node_id, node.label_canon,
             join(node.label_examples, "; "),
             node.deg_in, node.deg_out
-        ))
-    end
+        ) for node in values(nodes)]
+    _executemany_rows!(stmt, rows)
     DBInterface.close!(stmt)
 end
 
@@ -259,29 +280,27 @@ function _write_edges!(db, edges::Dict{Int64,EdgeRecord})
             pol_mass_inc, pol_mass_dec, pol_mass_unk, controversy,
             stage, confidence, grounded, source_model, specificity, is_symmetric)
            VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?)""")
-    for e in values(edges)
-        DBInterface.execute(stmt, (
+    rows = [(
             e.edge_id, e.src_id, e.dst_id, reltype_str(e.rel_type), polarity_str(e.polarity),
             e.support_lcms, e.support_docs, e.score_sum, e.score_mean, e.score_max,
             e.pol_mass_inc, e.pol_mass_dec, e.pol_mass_unk, e.controversy,
             e.stage, e.confidence, e.grounded, e.source_model, e.specificity,
             e.is_symmetric ? 1 : 0,
-        ))
-    end
+        ) for e in values(edges)]
+    _executemany_rows!(stmt, rows)
     DBInterface.close!(stmt)
 end
 
 function _write_support!(db, rows::Vector{EdgeSupportRecord})
     stmt = DBInterface.prepare(db,
         """INSERT INTO atlas_edge_support
-           (id, edge_id, doc_id, atlas_id, lcm_instance_id, score, score_raw, coupling)
-           VALUES (?,?,?,?,?,?,?,?)""")
-    for (i, r) in enumerate(rows)
-        DBInterface.execute(stmt, (
+           (id, edge_id, doc_id, atlas_id, lcm_instance_id, domain, source_text, score, score_raw, coupling)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""")
+    params = [(
             i, r.edge_id, r.doc_id, r.atlas_id, r.lcm_instance_id,
-            r.score, r.score_raw, r.coupling
-        ))
-    end
+            r.domain, r.source_text, r.score, r.score_raw, r.coupling
+        ) for (i, r) in enumerate(rows)]
+    _executemany_rows!(stmt, params)
     DBInterface.close!(stmt)
 end
 
@@ -291,12 +310,11 @@ function _write_sccs!(db, edges::Dict{Int64,EdgeRecord}, nodes::Dict{Int64,NodeR
     isempty(sccs) && return
     stmt = DBInterface.prepare(db,
         "INSERT OR REPLACE INTO atlas_scc (scc_id, n_nodes, n_edges, support_docs, top_nodes, node_ids) VALUES (?,?,?,?,?,?)")
-    for scc in sccs
-        DBInterface.execute(stmt, (
+    rows = [(
             scc.scc_id, scc.n_nodes, scc.n_edges, scc.support_docs,
             join(scc.top_nodes, "; "),
             join(string.(scc.node_ids), ","),
-        ))
-    end
+        ) for scc in sccs]
+    _executemany_rows!(stmt, rows)
     DBInterface.close!(stmt)
 end

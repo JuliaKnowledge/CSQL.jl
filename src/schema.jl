@@ -4,11 +4,15 @@
 _int_type(::Type{<:SQLite.DB}) = "INTEGER"
 _int_type(::Any) = "BIGINT"
 
+_real_type(::Type{<:SQLite.DB}) = "REAL"
+_real_type(::Any) = "DOUBLE"
+
 _autoincrement_col(::Type{<:SQLite.DB}) = "id INTEGER PRIMARY KEY AUTOINCREMENT"
 _autoincrement_col(::Any) = "id BIGINT PRIMARY KEY"
 
 function _schema_sql(db)
     IT = _int_type(typeof(db))
+    RT = _real_type(typeof(db))
     id_col = _autoincrement_col(typeof(db))
     [
 """CREATE TABLE IF NOT EXISTS atlas_nodes (
@@ -27,18 +31,18 @@ function _schema_sql(db)
     polarity      TEXT NOT NULL,
     support_lcms  INTEGER DEFAULT 0,
     support_docs  INTEGER DEFAULT 0,
-    score_sum     REAL DEFAULT 0.0,
-    score_mean    REAL DEFAULT 0.0,
-    score_max     REAL DEFAULT 0.0,
-    pol_mass_inc  REAL DEFAULT 0.0,
-    pol_mass_dec  REAL DEFAULT 0.0,
-    pol_mass_unk  REAL DEFAULT 0.0,
-    controversy   REAL DEFAULT 0.0,
+    score_sum     $RT DEFAULT 0.0,
+    score_mean    $RT DEFAULT 0.0,
+    score_max     $RT DEFAULT 0.0,
+    pol_mass_inc  $RT DEFAULT 0.0,
+    pol_mass_dec  $RT DEFAULT 0.0,
+    pol_mass_unk  $RT DEFAULT 0.0,
+    controversy   $RT DEFAULT 0.0,
     stage         TEXT DEFAULT 'original',
-    confidence    REAL DEFAULT 1.0,
+    confidence    $RT DEFAULT 1.0,
     grounded      TEXT DEFAULT 'not_evaluated',
     source_model  TEXT DEFAULT 'unknown',
-    specificity   REAL DEFAULT 0.0,
+    specificity   $RT DEFAULT 0.0,
     is_symmetric  INTEGER DEFAULT 0
 )""",
 
@@ -48,9 +52,11 @@ function _schema_sql(db)
     doc_id          TEXT NOT NULL,
     atlas_id        TEXT DEFAULT '',
     lcm_instance_id TEXT NOT NULL,
-    score           REAL DEFAULT 1.0,
-    score_raw       REAL DEFAULT 1.0,
-    coupling        REAL DEFAULT 1.0
+    domain          TEXT DEFAULT '',
+    source_text     TEXT DEFAULT '',
+    score           $RT DEFAULT 1.0,
+    score_raw       $RT DEFAULT 1.0,
+    coupling        $RT DEFAULT 1.0
 )""",
 
 """CREATE TABLE IF NOT EXISTS atlas_scc (
@@ -69,8 +75,12 @@ const INDEX_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_edges_dst ON atlas_edges(dst_id)",
     "CREATE INDEX IF NOT EXISTS idx_edges_rel ON atlas_edges(rel_type)",
     "CREATE INDEX IF NOT EXISTS idx_edges_score ON atlas_edges(score_sum)",
+    "CREATE INDEX IF NOT EXISTS idx_edges_src_score ON atlas_edges(src_id, score_sum DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_edges_dst_score ON atlas_edges(dst_id, score_sum DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_edges_src_dst ON atlas_edges(src_id, dst_id)",
     "CREATE INDEX IF NOT EXISTS idx_support_edge ON atlas_edge_support(edge_id)",
     "CREATE INDEX IF NOT EXISTS idx_support_doc ON atlas_edge_support(doc_id)",
+    "CREATE INDEX IF NOT EXISTS idx_support_edge_doc_lcm ON atlas_edge_support(edge_id, doc_id, lcm_instance_id)",
     "CREATE INDEX IF NOT EXISTS idx_nodes_label ON atlas_nodes(label_canon)",
 ]
 

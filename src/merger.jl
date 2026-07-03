@@ -16,6 +16,7 @@ function merge_atlases!(target::CSQLDatabase, sources::Vector{<:CSQLDatabase};
     all_nodes = Dict{Int64,NamedTuple}()
     all_edge_aggs = Dict{Int64,Dict{Symbol,Any}}()
     doc_tracker = Dict{Int64,Set{String}}()
+    lcm_tracker = Dict{Int64,Set{Tuple{String,String}}}()
     score_tracker = Dict{Int64,Vector{Float64}}()
 
     for (i, src) in enumerate(sources)
@@ -25,9 +26,12 @@ function merge_atlases!(target::CSQLDatabase, sources::Vector{<:CSQLDatabase};
         for row in support_rows
             push!(all_support, EdgeSupportRecord(
                 row.edge_id, row.doc_id, aid, row.lcm_instance_id,
+                hasproperty(row, :domain) ? string(row.domain) : "",
+                hasproperty(row, :source_text) ? string(row.source_text) : "",
                 Float64(row.score), Float64(row.score_raw), Float64(row.coupling),
             ))
             push!(get!(Set{String}, doc_tracker, row.edge_id), row.doc_id)
+            push!(get!(Set{Tuple{String,String}}, lcm_tracker, row.edge_id), (aid, string(row.lcm_instance_id)))
             push!(get!(Vector{Float64}, score_tracker, row.edge_id), Float64(row.score))
         end
 
@@ -102,8 +106,8 @@ function merge_atlases!(target::CSQLDatabase, sources::Vector{<:CSQLDatabase};
             agg[:src_id],
             agg[:dst_id],
             _as_relation_type(agg[:rel_type]),
-            _as_polarity(agg[:polarity]),
-            length(scores),
+            dominant_polarity(agg[:pol_mass_inc], agg[:pol_mass_dec], agg[:pol_mass_unk]),
+            length(get(lcm_tracker, eid, Set{Tuple{String,String}}())),
             length(get(doc_tracker, eid, Set{String}())),
             score_sum,
             score_mean,

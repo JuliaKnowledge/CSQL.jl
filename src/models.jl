@@ -42,6 +42,16 @@ function reltype_str(rt::RelationType)
     string(rt)
 end
 
+function dominant_polarity(inc::Real, dec::Real, unk::Real)::Polarity
+    if inc > dec && inc > unk
+        return INCREASE
+    elseif dec > inc && dec > unk
+        return DECREASE
+    else
+        return UNKNOWN_POL
+    end
+end
+
 # ─── Data records ────────────────────────────────────────────────────────────
 
 """A single causal claim extracted from text."""
@@ -107,6 +117,8 @@ struct EdgeSupportRecord
     doc_id::String
     atlas_id::String
     lcm_instance_id::String
+    domain::String
+    source_text::String
     score::Float64
     score_raw::Float64
     coupling::Float64
